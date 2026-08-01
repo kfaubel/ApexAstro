@@ -4,6 +4,10 @@ A modern WPF application for browsing and reviewing astronomical images and FITS
 
 <img width="3701" height="2007" alt="AstroImages" src="https://github.com/user-attachments/assets/fceba398-5514-4f59-a656-16fe1f0d632f" />
 
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+![Version](https://img.shields.io/badge/Version-1.9.0-blue.svg)
+![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%2F11-brightgreen.svg)
+
 ## Key Features
 
 - **View FITS and XISF astronomical images** - Includes display of metadata for these file formats
@@ -17,6 +21,16 @@ A modern WPF application for browsing and reviewing astronomical images and FITS
 - **Dark mode** - Switch between light and dark themes for comfortable viewing
 - **Median & Mean** - Calculates these values and displays then as 0.0-1.0 or 0-65535
 - **Session Metadata NINA plugin values** - Reads the AquisitionDetails.csv and ImageMetaData.csv if present
+
+---
+
+## Project Status
+
+ApexAstro is actively maintained and ready for production use. The application includes 146+ unit tests covering core functionality (FITS/XISF parsing, file management, metadata extraction). See [RELEASE_NOTES.txt](RELEASE_NOTES.txt) for the latest changes.
+
+For security concerns, please refer to [SECURITY.md](SECURITY.md).
+
+---
 
 ## Support for NINA Users
 

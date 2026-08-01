@@ -31,18 +31,56 @@ namespace ApexAstro.Wpf.Services
         /// <summary>
         /// Creates a clickable column header that triggers sorting when clicked
         /// </summary>
-        private GridViewColumnHeader CreateSortableHeader(string headerText)
+        private GridViewColumnHeader CreateSortableHeader(string headerText, string? displayName = null)
         {
             var header = new GridViewColumnHeader
             {
-                Content = headerText,
-                Tag = headerText // Store column name for sorting
+                Content = displayName ?? headerText,
+                Tag = headerText, // Store column name for sorting
+                ToolTip = "Click to sort (A→Z or 0→9)\nClick again to reverse"
             };
             
             // Add click handler for sorting
             header.Click += ColumnHeader_Click;
             
             return header;
+        }
+        
+        /// <summary>
+        /// Gets the display name for a metadata keyword, shortening long names to save space
+        /// </summary>
+        private string GetDisplayName(string keyword)
+        {
+            return keyword switch
+            {
+                "EXPOSURE" => "EXP",
+                "CCD-TEMP" => "TEMP",
+                _ => keyword
+            };
+        }
+        
+        /// <summary>
+        /// Updates column header visual indicators based on current sort state
+        /// </summary>
+        public void UpdateSortIndicators(string? sortColumn, System.ComponentModel.ListSortDirection? sortDirection)
+        {
+            if (!(_fileListView.View is GridView gridView)) return;
+            
+            foreach (var column in gridView.Columns)
+            {
+                if (column.Header is GridViewColumnHeader header && header.Tag is string columnName)
+                {
+                    if (columnName == sortColumn && sortDirection.HasValue)
+                    {
+                        var arrow = sortDirection.Value == System.ComponentModel.ListSortDirection.Ascending ? "▲" : "▼";
+                        header.Content = $"{columnName} {arrow}";
+                    }
+                    else
+                    {
+                        header.Content = columnName;
+                    }
+                }
+            }
         }
         
         /// <summary>
@@ -56,6 +94,8 @@ namespace ApexAstro.Wpf.Services
                 if (_fileListView.DataContext is MainWindowViewModel viewModel)
                 {
                     viewModel.SortByColumn(columnName);
+                    // Update visual indicators to show which column is sorted and in which direction
+                    UpdateSortIndicators(viewModel.CurrentSortColumn, viewModel.CurrentSortDirection);
                 }
             }
         }
@@ -271,7 +311,7 @@ namespace ApexAstro.Wpf.Services
                 
                 var column = new GridViewColumn
                 {
-                    Header = CreateSortableHeader(keyword),
+                    Header = CreateSortableHeader(keyword, GetDisplayName(keyword)),
                     Width = calculatedWidth,
                     CellTemplate = template
                 };
@@ -302,7 +342,7 @@ namespace ApexAstro.Wpf.Services
                 
                 var column = new GridViewColumn
                 {
-                    Header = CreateSortableHeader(keyword),
+                    Header = CreateSortableHeader(keyword, GetDisplayName(keyword)),
                     Width = calculatedWidth,
                     CellTemplate = template
                 };
@@ -330,7 +370,7 @@ namespace ApexAstro.Wpf.Services
 
                 var column = new GridViewColumn
                 {
-                    Header = CreateSortableHeader(keyword),
+                    Header = CreateSortableHeader(keyword, GetDisplayName(keyword)),
                     Width = calculatedWidth,
                     CellTemplate = template
                 };
@@ -997,6 +1037,12 @@ namespace ApexAstro.Wpf.Services
         {
             if (column.Header is GridViewColumnHeader gridHeader)
             {
+                // Use Tag for columns that have it (internal keyword name), fall back to Content for display
+                // This ensures column order tracking uses the actual keyword, not shortened display names
+                if (gridHeader.Tag != null && !string.IsNullOrWhiteSpace(gridHeader.Tag.ToString()))
+                {
+                    return gridHeader.Tag.ToString() ?? string.Empty;
+                }
                 return gridHeader.Content?.ToString() ?? string.Empty;
             }
 

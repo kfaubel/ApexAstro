@@ -10,5 +10,6 @@ namespace ApexAstro.Wpf.Services
         double CalculateTotalColumnsWidth();
         void AdjustSplitterForOptimalWidth();
         void SaveCurrentColumnOrder();
+        void UpdateSortIndicators(string? sortColumn, System.ComponentModel.ListSortDirection? sortDirection);
     }
 }

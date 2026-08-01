@@ -779,9 +779,19 @@ namespace ApexAstro.Wpf.ViewModels
         private string _currentSortColumn = "Name";
         
         /// <summary>
+        /// Public property for the currently sorted column (read-only for View binding)
+        /// </summary>
+        public string? CurrentSortColumn => _currentSortColumn;
+        
+        /// <summary>
         /// Current sort direction for tracking sort state
         /// </summary>
         private ListSortDirection _currentSortDirection = ListSortDirection.Ascending;
+        
+        /// <summary>
+        /// Public property for the current sort direction (read-only for View binding)
+        /// </summary>
+        public ListSortDirection? CurrentSortDirection => _currentSortDirection;
         
         /// <summary>
         /// Gets the count of files for command CanExecute evaluation

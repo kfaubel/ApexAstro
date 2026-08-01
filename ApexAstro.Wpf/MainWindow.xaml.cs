@@ -133,6 +133,9 @@ namespace ApexAstro.Wpf
             // Initialize the ListView columns based on configuration
             _listViewColumnService.UpdateListViewColumns();
             
+            // Show initial sort indicator for the default sort column
+            _listViewColumnService.UpdateSortIndicators(_viewModel.CurrentSortColumn, _viewModel.CurrentSortDirection);
+            
             // Auto-resize columns to fit content after initial setup
             _listViewColumnService.AutoResizeColumns();
             

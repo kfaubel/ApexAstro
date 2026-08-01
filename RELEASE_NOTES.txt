@@ -1,14 +1,16 @@
 ApexAstro Release Notes
 
+v1.9.0
+* Added better support for ASIAIR images
+* Prompt the user for ASIAIR file format or N.I.N.A. file format on first launch
+* Update the getting started overview to make it more focused and easier to follow
+* Updated UI behavior and appearance to be more consistant and cleaner
+
 v1.8.0
 * Added interactive graphing for image metadata with saved graph settings.
 
 v1.7.0 
-
-ApexAstro is the new name for the original AstroImages application.
-
-New Features:
-* Blinking is now much faster
-* There is now the option to hide the full filename and show just the time and frame number leaving more room for metadata columns.
-* New Getting Started page
-
+* ApexAstro is the new name for the original AstroImages application.
+* Blinking is now much faster.
+* There is now the option to hide the full filename and show just the time and frame number. 
+* New Getting Started page.
