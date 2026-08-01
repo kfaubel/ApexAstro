@@ -1,7 +1,7 @@
 <Window x:Class="ApexAstro.Wpf.SplashWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="ApexAstro" Height="760" Width="760"
+        Title="ApexAstro" Height="760" Width="836"
         WindowStartupLocation="CenterScreen"
         WindowStyle="SingleBorderWindow"
         Icon="icon.ico"

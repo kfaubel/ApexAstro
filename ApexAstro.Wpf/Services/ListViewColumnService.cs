@@ -16,6 +16,7 @@ namespace ApexAstro.Wpf.Services
         private readonly System.Windows.Controls.ListView _fileListView;
         private readonly AppConfig _appConfig;
         private GridSplitter? _gridSplitter; // Track the splitter for manual move detection
+        private List<string> _defaultColumnOrder = new();
 
         public ListViewColumnService(System.Windows.Controls.ListView fileListView, AppConfig appConfig, System.Windows.Media.Brush greenTextBrush, System.Windows.Media.Brush blueTextBrush)
         {
@@ -246,6 +247,37 @@ namespace ApexAstro.Wpf.Services
                 gridView.Columns.Add(meanColumn);
             }
 
+            // Custom keyword columns (green) - each has individual width based on keyword length
+            foreach (var keyword in _appConfig.CustomKeywords)
+            {
+                var factory = new FrameworkElementFactory(typeof(System.Windows.Controls.TextBlock));
+                
+                // Use SafeDictionaryConverter with parameter to avoid KeyNotFoundException
+                var binding = new System.Windows.Data.Binding("CustomKeywords");
+                binding.Converter = new SafeDictionaryConverter();
+                binding.ConverterParameter = keyword;
+                
+                factory.SetBinding(System.Windows.Controls.TextBlock.TextProperty, binding);
+                // Bind to theme resource so foreground color updates when theme changes
+                var foregroundBinding = new System.Windows.Data.Binding();
+                foregroundBinding.Source = System.Windows.Application.Current;
+                foregroundBinding.Path = new System.Windows.PropertyPath("Resources[ThemeAccentGreen]");
+                factory.SetBinding(System.Windows.Controls.TextBlock.ForegroundProperty, foregroundBinding);
+                factory.SetValue(System.Windows.Controls.TextBlock.TextTrimmingProperty, System.Windows.TextTrimming.CharacterEllipsis);
+                var template = new DataTemplate { VisualTree = factory };
+                
+                // Calculate width based on actual data content - different for each keyword
+                double calculatedWidth = CalculateDataDrivenColumnWidth(keyword, true);
+                
+                var column = new GridViewColumn
+                {
+                    Header = CreateSortableHeader(keyword),
+                    Width = calculatedWidth,
+                    CellTemplate = template
+                };
+                gridView.Columns.Add(column);
+            }
+
             // FITS keyword columns (blue) - each has individual width based on keyword length
             foreach (var keyword in _appConfig.FitsKeywords)
             {
@@ -305,39 +337,13 @@ namespace ApexAstro.Wpf.Services
                 gridView.Columns.Add(column);
             }
 
-            // Custom keyword columns (green) - each has individual width based on keyword length
-            foreach (var keyword in _appConfig.CustomKeywords)
-            {
-                var factory = new FrameworkElementFactory(typeof(System.Windows.Controls.TextBlock));
-                
-                // Use SafeDictionaryConverter with parameter to avoid KeyNotFoundException
-                var binding = new System.Windows.Data.Binding("CustomKeywords");
-                binding.Converter = new SafeDictionaryConverter();
-                binding.ConverterParameter = keyword;
-                
-                factory.SetBinding(System.Windows.Controls.TextBlock.TextProperty, binding);
-                // Bind to theme resource so foreground color updates when theme changes
-                var foregroundBinding = new System.Windows.Data.Binding();
-                foregroundBinding.Source = System.Windows.Application.Current;
-                foregroundBinding.Path = new System.Windows.PropertyPath("Resources[ThemeAccentGreen]");
-                factory.SetBinding(System.Windows.Controls.TextBlock.ForegroundProperty, foregroundBinding);
-                factory.SetValue(System.Windows.Controls.TextBlock.TextTrimmingProperty, System.Windows.TextTrimming.CharacterEllipsis);
-                var template = new DataTemplate { VisualTree = factory };
-                
-                // Calculate width based on actual data content - different for each keyword
-                double calculatedWidth = CalculateDataDrivenColumnWidth(keyword, true);
-                
-                var column = new GridViewColumn
-                {
-                    Header = CreateSortableHeader(keyword),
-                    Width = calculatedWidth,
-                    CellTemplate = template
-                };
-                gridView.Columns.Add(column);
-            }
-
             // Skip automatic auto-resize to keep columns narrow
             // Auto-resize will only happen when explicitly called via AutoResizeColumns() method
+
+            _defaultColumnOrder = gridView.Columns
+                .Select(GetColumnHeaderText)
+                .Where(h => !string.IsNullOrWhiteSpace(h))
+                .ToList();
 
             ApplySavedColumnOrder(gridView);
             
@@ -926,15 +932,25 @@ namespace ApexAstro.Wpf.Services
                 return;
             }
 
-            _appConfig.FileListColumnOrder = gridView.Columns
+            var currentOrder = gridView.Columns
                 .Select(GetColumnHeaderText)
                 .Where(h => !string.IsNullOrWhiteSpace(h))
                 .ToList();
+
+            if (ColumnOrderMatchesDefaults(currentOrder))
+            {
+                _appConfig.HasCustomColumnOrder = false;
+                _appConfig.FileListColumnOrder.Clear();
+                return;
+            }
+
+            _appConfig.HasCustomColumnOrder = true;
+            _appConfig.FileListColumnOrder = currentOrder;
         }
 
         private void ApplySavedColumnOrder(GridView gridView)
         {
-            if (_appConfig.FileListColumnOrder == null || _appConfig.FileListColumnOrder.Count == 0)
+            if (!_appConfig.HasCustomColumnOrder || _appConfig.FileListColumnOrder == null || _appConfig.FileListColumnOrder.Count == 0)
             {
                 return;
             }
@@ -957,6 +973,24 @@ namespace ApexAstro.Wpf.Services
                 insertionIndex++;
                 columnsToOrder.Remove(match);
             }
+        }
+
+        private bool ColumnOrderMatchesDefaults(List<string> currentOrder)
+        {
+            if (_defaultColumnOrder.Count != currentOrder.Count)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < _defaultColumnOrder.Count; i++)
+            {
+                if (!string.Equals(_defaultColumnOrder[i], currentOrder[i], StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static string GetColumnHeaderText(GridViewColumn column)

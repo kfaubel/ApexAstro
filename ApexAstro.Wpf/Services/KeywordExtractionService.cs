@@ -18,8 +18,9 @@ namespace ApexAstro.Wpf.Services
         {
             var operationStopwatch = System.Diagnostics.Stopwatch.StartNew();
             var result = new Dictionary<string, string>();
+            var requestedKeywords = keywords.ToList();
 
-            if (!File.Exists(filePath) || !keywords.Any())
+            if (!File.Exists(filePath) || requestedKeywords.Count == 0)
                 return result;
 
             try
@@ -30,12 +31,12 @@ namespace ApexAstro.Wpf.Services
                     // Use the optimized header-only reader instead of reading entire file
                     var fitsHeaders = FitsParser.ParseHeaderFromFile(filePath);
 
-                    foreach (var keyword in keywords)
+                    foreach (var keyword in requestedKeywords)
                     {
-                        if (fitsHeaders.TryGetValue(keyword, out var value))
+                        if (TryGetKeywordValueWithAliases(fitsHeaders, keyword, out var matchedKey, out var value))
                         {
                             // Apply keyword-aware formatting (including compact RA/Dec conversion).
-                            result[keyword] = FitsUtilities.FormatHeaderValue(keyword, value);
+                            result[keyword] = FitsUtilities.FormatHeaderValue(matchedKey, value);
                         }
                     }
                 }
@@ -45,20 +46,24 @@ namespace ApexAstro.Wpf.Services
                     try
                     {
                         // Debug: Log what keywords we're looking for
-                        var keywordList = string.Join(", ", keywords);
+                        var lookupKeywords = BuildAliasKeywordList(requestedKeywords);
+                        var keywordList = string.Join(", ", lookupKeywords);
                         System.Diagnostics.Debug.WriteLine($"Extracting XISF keywords from {System.IO.Path.GetFileName(filePath)}: {keywordList}");
                         
                         // Use the optimized method that only extracts requested keywords via regex
                         // This is much faster than ParseMetadataFromFile which parses all properties
-                        var xisfKeywords = XisfParser.ParseSpecificFitsKeywords(filePath, keywords);
+                        var xisfKeywords = XisfParser.ParseSpecificFitsKeywords(filePath, lookupKeywords);
                         
                         System.Diagnostics.Debug.WriteLine($"Found {xisfKeywords.Count} keywords in {System.IO.Path.GetFileName(filePath)}");
                         
-                        foreach (var kvp in xisfKeywords)
+                        foreach (var keyword in requestedKeywords)
                         {
-                            System.Diagnostics.Debug.WriteLine($"  {kvp.Key} = {kvp.Value}");
-                            var formatted = XisfUtilities.FormatPropertyValue(kvp.Value);
-                            result[kvp.Key] = FitsUtilities.FormatCoordinateKeywordValue(kvp.Key, kvp.Value, formatted);
+                            if (TryGetKeywordValueWithAliases(xisfKeywords, keyword, out var matchedKey, out var matchedValue))
+                            {
+                                System.Diagnostics.Debug.WriteLine($"  {matchedKey} = {matchedValue}");
+                                var formatted = XisfUtilities.FormatPropertyValue(matchedValue);
+                                result[keyword] = FitsUtilities.FormatCoordinateKeywordValue(matchedKey, matchedValue, formatted);
+                            }
                         }
                     }
                     catch (Exception xisfEx)
@@ -86,6 +91,60 @@ namespace ApexAstro.Wpf.Services
             }
 
             return result;
+        }
+
+        private static bool TryGetKeywordValueWithAliases<T>(
+            Dictionary<string, T> values,
+            string requestedKeyword,
+            out string matchedKey,
+            out T matchedValue)
+        {
+            if (values.TryGetValue(requestedKeyword, out var exactValue))
+            {
+                matchedKey = requestedKeyword;
+                matchedValue = exactValue;
+                return true;
+            }
+
+            var requestedNormalized = NormalizeKeyword(requestedKeyword);
+            foreach (var kvp in values)
+            {
+                if (NormalizeKeyword(kvp.Key) == requestedNormalized)
+                {
+                    matchedKey = kvp.Key;
+                    matchedValue = kvp.Value;
+                    return true;
+                }
+            }
+
+            matchedKey = requestedKeyword;
+            matchedValue = default!;
+            return false;
+        }
+
+        private static List<string> BuildAliasKeywordList(IEnumerable<string> keywords)
+        {
+            var all = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var keyword in keywords)
+            {
+                if (string.IsNullOrWhiteSpace(keyword))
+                    continue;
+
+                all.Add(keyword);
+
+                if (keyword.Contains('_'))
+                    all.Add(keyword.Replace('_', '-'));
+
+                if (keyword.Contains('-'))
+                    all.Add(keyword.Replace('-', '_'));
+            }
+
+            return all.ToList();
+        }
+
+        private static string NormalizeKeyword(string keyword)
+        {
+            return keyword.Replace("_", string.Empty).Replace("-", string.Empty).ToUpperInvariant();
         }
 
 

@@ -213,7 +213,11 @@ namespace ApexAstro.Wpf
             {
                 // User opened file(s) from Windows Explorer
                 // Load the entire containing folder and select the clicked file
-                Loaded += async (sender, e) => await LoadFolderAndSelectFileAsync(_commandLineFilePaths[0]);
+                Loaded += async (sender, e) =>
+                {
+                    await LoadFolderAndSelectFileAsync(_commandLineFilePaths[0]);
+                    ShowImageCaptureFormatPromptIfNeeded();
+                };
             }
             else
             {
@@ -222,7 +226,8 @@ namespace ApexAstro.Wpf
                 {
                     // Show splash screen if enabled
                     ShowSplashScreenIfEnabled();
-                    
+                    ShowImageCaptureFormatPromptIfNeeded();
+
                     // Brief delay to allow UI to process
                     await System.Threading.Tasks.Task.Delay(100);
                     
@@ -242,6 +247,59 @@ namespace ApexAstro.Wpf
 
             // Handle pane resize for Fit mode
             ImageScrollViewer.SizeChanged += ImageScrollViewer_SizeChanged;
+        }
+
+        private void ShowImageCaptureFormatPromptIfNeeded()
+        {
+            if (_appConfig.ImageCaptureFormatPromptShown)
+                return;
+
+            var dialog = new ImageCaptureFormatDialog
+            {
+                Owner = this
+            };
+
+            dialog.ShowDialog();
+
+            if (dialog.SelectedPreset.HasValue)
+            {
+                ApplySettingsPreset(dialog.SelectedPreset.Value);
+            }
+
+            _appConfig.ImageCaptureFormatPromptShown = true;
+            _appConfig.Save();
+        }
+
+        private void ApplySettingsPreset(SettingsResetPreset preset)
+        {
+            switch (preset)
+            {
+                case SettingsResetPreset.Nina:
+                    _appConfig.ShowFullFilename = false;
+                    _appConfig.ShowFilenameDateColumn = false;
+                    _appConfig.ShowFilenameTimeColumn = true;
+                    _appConfig.ShowFilenameFrameColumn = true;
+                    _appConfig.FitsKeywords = new List<string> { "EXPOSURE", "FILTER", "CCD-TEMP", "IMAGETYP" };
+                    _appConfig.CustomKeywords = new List<string> { "RMS", "HFR", "ECC", "Stars" };
+                    _appConfig.CsvKeywords = new List<string>();
+                    break;
+
+                case SettingsResetPreset.Asiair:
+                    _appConfig.ShowFullFilename = true;
+                    _appConfig.ShowFilenameDateColumn = false;
+                    _appConfig.ShowFilenameTimeColumn = false;
+                    _appConfig.ShowFilenameFrameColumn = false;
+                    _appConfig.FitsKeywords = new List<string> { "EXPOSURE", "CCD_TEMP", "IMAGETYP" };
+                    _appConfig.CustomKeywords = new List<string>();
+                    _appConfig.CsvKeywords = new List<string>();
+                    break;
+
+                default:
+                    break;
+            }
+
+            _listViewColumnService?.UpdateListViewColumns();
+            _listViewColumnService?.AutoResizeColumns();
         }
 
         /// <summary>

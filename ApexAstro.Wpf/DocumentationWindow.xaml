@@ -18,9 +18,11 @@
                     Foreground="{DynamicResource ThemeForeground}">
             <TabItem Header="Getting Started">
                 <FlowDocumentScrollViewer Name="GettingStartedViewer"
+                                          IsToolBarVisible="False"
                                           Background="{DynamicResource ThemeWindowBackground}"
                                           Foreground="{DynamicResource ThemeForeground}">
-                    <FlowDocument Name="GettingStartedContent" FontFamily="Segoe UI" FontSize="16"
+                    <FlowDocument Name="GettingStartedContent" FontFamily="Segoe UI" FontSize="14"
+                                  TextAlignment="Left" ColumnWidth="9999" PagePadding="20,12,20,12"
                                   Background="{DynamicResource ThemeWindowBackground}"
                                   Foreground="{DynamicResource ThemeForeground}">
                         <!-- Content will be loaded dynamically -->
@@ -29,9 +31,11 @@
             </TabItem>
             <TabItem Header="Documentation">
                 <FlowDocumentScrollViewer Name="DocumentViewer"
+                                          IsToolBarVisible="False"
                                           Background="{DynamicResource ThemeWindowBackground}"
                                           Foreground="{DynamicResource ThemeForeground}">
-                    <FlowDocument Name="DocumentContent" FontFamily="Segoe UI" FontSize="16"
+                    <FlowDocument Name="DocumentContent" FontFamily="Segoe UI" FontSize="14"
+                                  TextAlignment="Left" ColumnWidth="9999" PagePadding="20,12,20,12"
                                   Background="{DynamicResource ThemeWindowBackground}"
                                   Foreground="{DynamicResource ThemeForeground}">
                         <!-- Content will be loaded dynamically -->

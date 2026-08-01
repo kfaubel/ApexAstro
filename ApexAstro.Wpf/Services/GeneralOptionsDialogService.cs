@@ -67,12 +67,44 @@ namespace ApexAstro.Wpf.Services
                     currentCsvKeywords = newCsvKeywords;
                 }
             };
+
+            dialog.ResetPresetRequested += preset =>
+            {
+                var (fitsKeywords, customKeywords, csvKeywords) = GetKeywordsForPreset(preset);
+                newFitsKeywords = fitsKeywords;
+                currentFitsKeywords = fitsKeywords;
+                newCustomKeywords = customKeywords;
+                newCsvKeywords = csvKeywords;
+                currentCustomKeywords = customKeywords;
+                currentCsvKeywords = csvKeywords;
+            };
             
             if (dialog.ShowDialog() == true)
             {
                 return (dialog.ShowSizeColumn, dialog.ShowFullFilename, dialog.ShowFilenameDateColumn, dialog.ShowFilenameTimeColumn, dialog.ShowFilenameFrameColumn, dialog.ShowMedianColumn, dialog.SelectedTheme, dialog.ShowFullScreenHelp, dialog.PlayPauseInterval, dialog.ScanXisfForFitsKeywords, dialog.MedianDisplayMode, dialog.ShowHistogram, newFitsKeywords, newCustomKeywords, newCsvKeywords);
             }
             return (null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+        }
+
+        private static (List<string> fitsKeywords, List<string> customKeywords, List<string> csvKeywords) GetKeywordsForPreset(SettingsResetPreset preset)
+        {
+            switch (preset)
+            {
+                case SettingsResetPreset.Nina:
+                    return (
+                        new List<string> { "EXPOSURE", "FILTER", "CCD-TEMP", "IMAGETYP" },
+                        new List<string> { "RMS", "HFR", "ECC", "Stars" },
+                        new List<string>());
+
+                case SettingsResetPreset.Asiair:
+                    return (
+                        new List<string> { "EXPOSURE", "CCD_TEMP", "IMAGETYP" },
+                        new List<string>(),
+                        new List<string>());
+
+                default:
+                    return (new List<string>(), new List<string>(), new List<string>());
+            }
         }
     }
 }

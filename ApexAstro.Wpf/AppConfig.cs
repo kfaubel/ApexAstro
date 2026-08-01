@@ -97,9 +97,9 @@ namespace ApexAstro.Wpf
         
         /// <summary>
         /// Whether to show the median column in the file list.
-        /// Default is true.
+        /// Default is false.
         /// </summary>
-        public bool ShowMedianColumn { get; set; } = true;
+        public bool ShowMedianColumn { get; set; } = false;
         
         /// <summary>
         /// Display mode for median values (Normalized or 16-bit range).
@@ -173,6 +173,12 @@ namespace ApexAstro.Wpf
         public bool ShowSplashScreen { get; set; } = true;
 
         /// <summary>
+        /// Tracks whether the first-run image capture format prompt has already been shown.
+        /// Prevents the startup prompt from appearing on every launch.
+        /// </summary>
+        public bool ImageCaptureFormatPromptShown { get; set; } = false;
+
+        /// <summary>
         /// Whether to automatically check for updates on startup.
         /// Default is true (check for updates). Set to false to disable.
         /// </summary>
@@ -232,6 +238,12 @@ namespace ApexAstro.Wpf
         /// This is used to restore user column reordering between sessions.
         /// </summary>
         public List<string> FileListColumnOrder { get; set; } = new List<string>();
+
+        /// <summary>
+        /// True only when a user has explicitly reordered columns away from the default layout.
+        /// When false, default column ordering rules are used and saved order is ignored.
+        /// </summary>
+        public bool HasCustomColumnOrder { get; set; } = false;
 
         /// <summary>
         /// Graph settings: name of the column used as the X axis.
@@ -304,11 +316,10 @@ namespace ApexAstro.Wpf
                     // Read the entire file as a string
                     var json = File.ReadAllText(ConfigFilePath);
                     
-                    // Deserialize JSON string back into AppConfig object
-                    // JsonSerializer.Deserialize converts JSON text back to C# objects
-                    var config = JsonSerializer.Deserialize<AppConfig>(json);
-                    
-                    // Return the loaded config, or new default if deserialization returned null
+                    var config = JsonSerializer.Deserialize<AppConfig>(json, new JsonSerializerOptions
+                    {
+                        NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals
+                    });
                     return config ?? new AppConfig();
                 }
             }
@@ -333,7 +344,13 @@ namespace ApexAstro.Wpf
                     Directory.CreateDirectory(directory);
                 }
 
-                var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
+                var json = JsonSerializer.Serialize(this, new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    // NaN is used for unset window positions; AllowNamedFloatingPointLiterals is required
+                    // because System.Text.Json rejects NaN by default and would silently abort Save().
+                    NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals
+                });
                 File.WriteAllText(ConfigFilePath, json);
             }
             catch (Exception ex)
@@ -386,9 +403,17 @@ namespace ApexAstro.Wpf
         public static string ExtractDateToken(string filename)
         {
             var tokens = GetFilenameTokens(filename);
-            if (tokens.Length > 0 && IsDateToken(tokens[0]))
+            foreach (var token in tokens)
             {
-                return tokens[0];
+                if (IsDateToken(token))
+                {
+                    return token;
+                }
+            }
+
+            if (TryExtractCompactDateTime(tokens, out var compactDate, out _))
+            {
+                return compactDate;
             }
 
             return string.Empty;
@@ -397,9 +422,17 @@ namespace ApexAstro.Wpf
         public static string ExtractTimeToken(string filename)
         {
             var tokens = GetFilenameTokens(filename);
-            if (tokens.Length > 1 && IsTimeToken(tokens[1]))
+            for (int i = 0; i < tokens.Length - 1; i++)
             {
-                return NormalizeTimeToken(tokens[1]);
+                if (IsDateToken(tokens[i]) && IsTimeToken(tokens[i + 1]))
+                {
+                    return NormalizeTimeToken(tokens[i + 1]);
+                }
+            }
+
+            if (TryExtractCompactDateTime(tokens, out _, out var compactTime))
+            {
+                return compactTime;
             }
 
             return string.Empty;
@@ -476,6 +509,61 @@ namespace ApexAstro.Wpf
                 }
             }
 
+            return true;
+        }
+
+        private static bool TryExtractCompactDateTime(string[] tokens, out string dateToken, out string timeToken)
+        {
+            dateToken = string.Empty;
+            timeToken = string.Empty;
+
+            if (tokens.Length == 0)
+            {
+                return false;
+            }
+
+            foreach (var token in tokens)
+            {
+                if (IsCompactDateTimeToken(token, out dateToken, out timeToken))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsCompactDateTimeToken(string token, out string dateToken, out string timeToken)
+        {
+            dateToken = string.Empty;
+            timeToken = string.Empty;
+
+            if (token.Length != 15)
+            {
+                return false;
+            }
+
+            if (!(char.IsDigit(token[0])
+                && char.IsDigit(token[1])
+                && char.IsDigit(token[2])
+                && char.IsDigit(token[3])
+                && char.IsDigit(token[4])
+                && char.IsDigit(token[5])
+                && char.IsDigit(token[6])
+                && char.IsDigit(token[7])
+                && token[8] == '-'
+                && char.IsDigit(token[9])
+                && char.IsDigit(token[10])
+                && char.IsDigit(token[11])
+                && char.IsDigit(token[12])
+                && char.IsDigit(token[13])
+                && char.IsDigit(token[14])))
+            {
+                return false;
+            }
+
+            dateToken = $"{token.Substring(0, 4)}-{token.Substring(4, 2)}-{token.Substring(6, 2)}";
+            timeToken = $"{token.Substring(9, 2)}:{token.Substring(11, 2)}:{token.Substring(13, 2)}";
             return true;
         }
 

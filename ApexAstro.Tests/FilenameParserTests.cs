@@ -269,6 +269,38 @@ namespace ApexAstro.Tests
         }
 
         [Fact]
+        public void ExtractDateToken_CompactFormat_ExtractsDate()
+        {
+            var filename = "20260724-234030.fits";
+
+            var date = FilenameParser.ExtractDateToken(filename);
+
+            Assert.Equal("2026-07-24", date);
+        }
+
+        [Fact]
+        public void ExtractTimeToken_CompactFormat_ExtractsTime()
+        {
+            var filename = "20260724-234030.fits";
+
+            var time = FilenameParser.ExtractTimeToken(filename);
+
+            Assert.Equal("23:40:30", time);
+        }
+
+        [Fact]
+        public void ExtractDateAndTimeToken_CompactFormatInMiddle_ExtractsValues()
+        {
+            var filename = "Light_SH2-101_120.0s_Bin1_20260724-232222_0.0C_0001.fit";
+
+            var date = FilenameParser.ExtractDateToken(filename);
+            var time = FilenameParser.ExtractTimeToken(filename);
+
+            Assert.Equal("2026-07-24", date);
+            Assert.Equal("23:22:22", time);
+        }
+
+        [Fact]
         public void ExtractFrameToken_NinaFormattedFilename_ExtractsTrailingSequence()
         {
             var filename = "2026-07-08_22-24-17_O_RMS_0.58_HFR_1.95_ECC_0.57_0306.fits";

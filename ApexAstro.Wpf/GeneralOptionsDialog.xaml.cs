@@ -1,8 +1,16 @@
+using System;
 using System.Windows;
 using System.Windows.Controls;
 
 namespace ApexAstro.Wpf
 {
+    public enum SettingsResetPreset
+    {
+        None,
+        Nina,
+        Asiair
+    }
+
     /// <summary>
     /// Dialog window for configuring general application options and preferences.
     /// This is a modal dialog that allows users to change settings like column visibility and theme.
@@ -92,6 +100,11 @@ namespace ApexAstro.Wpf
         /// Event raised when user clicks the CSV Keywords button.
         /// </summary>
         public event Action? CsvKeywordsRequested;
+
+        /// <summary>
+        /// Event raised when user applies a reset preset.
+        /// </summary>
+        public event Action<SettingsResetPreset>? ResetPresetRequested;
 
         /// <summary>
         /// Default constructor - creates the dialog with default settings.
@@ -222,6 +235,60 @@ namespace ApexAstro.Wpf
         private void CsvKeywordsButton_Click(object sender, RoutedEventArgs e)
         {
             CsvKeywordsRequested?.Invoke();
+        }
+
+        /// <summary>
+        /// Event handler for preset selection changes.
+        /// Updates the dialog options immediately, but persistence only happens when OK is clicked.
+        /// </summary>
+        private void ResetPresetComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsLoaded)
+                return;
+
+            var preset = GetSelectedResetPreset();
+
+            // Apply visible option defaults in the dialog immediately.
+            switch (preset)
+            {
+                case SettingsResetPreset.None:
+                    ShowFullFilenameCheckBox.IsChecked = true;
+                    ShowFilenameDateColumnCheckBox.IsChecked = false;
+                    ShowFilenameTimeColumnCheckBox.IsChecked = false;
+                    ShowFilenameFrameColumnCheckBox.IsChecked = false;
+                    ShowMedianColumnCheckBox.IsChecked = false;
+                    break;
+
+                case SettingsResetPreset.Nina:
+                    ShowFullFilenameCheckBox.IsChecked = false;
+                    ShowFilenameDateColumnCheckBox.IsChecked = false;
+                    ShowFilenameTimeColumnCheckBox.IsChecked = true;
+                    ShowFilenameFrameColumnCheckBox.IsChecked = true;
+                    break;
+
+                case SettingsResetPreset.Asiair:
+                    ShowFullFilenameCheckBox.IsChecked = true;
+                    ShowFilenameDateColumnCheckBox.IsChecked = false;
+                    ShowFilenameTimeColumnCheckBox.IsChecked = false;
+                    ShowFilenameFrameColumnCheckBox.IsChecked = false;
+                    break;
+            }
+
+            ResetPresetRequested?.Invoke(preset);
+        }
+
+        private SettingsResetPreset GetSelectedResetPreset()
+        {
+            if (ResetPresetComboBox.SelectedItem is ComboBoxItem selected && selected.Content is string name)
+            {
+                if (string.Equals(name, "NINA", StringComparison.OrdinalIgnoreCase))
+                    return SettingsResetPreset.Nina;
+
+                if (string.Equals(name, "ASIAIR", StringComparison.OrdinalIgnoreCase))
+                    return SettingsResetPreset.Asiair;
+            }
+
+            return SettingsResetPreset.None;
         }
 
         /// <summary>
