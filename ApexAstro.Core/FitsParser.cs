@@ -304,6 +304,57 @@ namespace ApexAstro.Core
         }
 
         /// <summary>
+        /// Read FITS image data into scaled floating-point pixels suitable for quantitative analysis.
+        /// Values are returned after FITS BSCALE/BZERO are applied.
+        /// </summary>
+        public static (int width, int height, float[] pixels, Dictionary<string, object> header) ReadImageAsFloat(byte[] buffer)
+        {
+            try
+            {
+                var (header, headerSize) = ParseHeaderWithSize(buffer);
+
+                if (!header.TryGetValue("NAXIS", out var naxisObj))
+                    throw new InvalidOperationException("Missing NAXIS keyword in FITS header");
+
+                int naxis = Convert.ToInt32(naxisObj);
+                if (naxis < 2)
+                    throw new InvalidOperationException($"FITS file has {naxis} dimensions, need at least 2 for image data");
+
+                if (!header.TryGetValue("NAXIS1", out var wObj) || !header.TryGetValue("NAXIS2", out var hObj))
+                    throw new InvalidOperationException("Missing NAXIS1/NAXIS2 in FITS header");
+
+                int width = Convert.ToInt32(wObj);
+                int height = Convert.ToInt32(hObj);
+
+                if (width <= 0 || height <= 0)
+                    throw new InvalidOperationException($"Invalid image dimensions: {width}x{height}");
+
+                if (!header.TryGetValue("BITPIX", out var bitpixObj))
+                    throw new InvalidOperationException("Missing BITPIX in FITS header");
+
+                int bitpix = Convert.ToInt32(bitpixObj);
+                double bzero = header.TryGetValue("BZERO", out var bzeroObj) ? Convert.ToDouble(bzeroObj) : 0.0;
+                double bscale = header.TryGetValue("BSCALE", out var bscaleObj) ? Convert.ToDouble(bscaleObj) : 1.0;
+
+                int bytesPerPixel = Math.Abs(bitpix) / 8;
+                long expectedDataSize = (long)width * height * bytesPerPixel;
+                if (buffer.Length < headerSize + expectedDataSize)
+                {
+                    throw new ArgumentOutOfRangeException(
+                        $"FITS buffer too small: expected {headerSize + expectedDataSize} bytes, got {buffer.Length}");
+                }
+
+                var pixels = new float[width * height];
+                ConvertImageDataToFloat(buffer, headerSize, pixels, width, height, bitpix, bzero, bscale);
+                return (width, height, pixels, header);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Failed to read FITS image as float: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
         /// Parse a single FITS header card (80 characters)
         /// </summary>
         private static (string keyword, object value, string comment)? ParseFitsCard(string card)
@@ -444,6 +495,72 @@ namespace ApexAstro.Core
                 case -64: // 64-bit floating point
                     ConvertFloat64Data(buffer, dataOffset, pixels, width, height, bzero, bscale);
                     break;
+                default:
+                    throw new NotSupportedException($"Unsupported BITPIX value: {bitpix}");
+            }
+        }
+
+        private static void ConvertImageDataToFloat(byte[] buffer, int dataOffset, float[] pixels,
+            int width, int height, int bitpix, double bzero, double bscale)
+        {
+            int pixelCount = width * height;
+            switch (bitpix)
+            {
+                case 8:
+                    for (int i = 0; i < pixelCount && dataOffset + i < buffer.Length; i++)
+                    {
+                        pixels[i] = (float)(buffer[dataOffset + i] * bscale + bzero);
+                    }
+                    break;
+
+                case 16:
+                    for (int i = 0; i < pixelCount && dataOffset + i * 2 + 1 < buffer.Length; i++)
+                    {
+                        short rawValue = (short)((buffer[dataOffset + i * 2] << 8) | buffer[dataOffset + i * 2 + 1]);
+                        pixels[i] = (float)(rawValue * bscale + bzero);
+                    }
+                    break;
+
+                case 32:
+                    for (int i = 0; i < pixelCount && dataOffset + i * 4 + 3 < buffer.Length; i++)
+                    {
+                        int rawValue = (buffer[dataOffset + i * 4] << 24) |
+                                       (buffer[dataOffset + i * 4 + 1] << 16) |
+                                       (buffer[dataOffset + i * 4 + 2] << 8) |
+                                        buffer[dataOffset + i * 4 + 3];
+                        pixels[i] = (float)(rawValue * bscale + bzero);
+                    }
+                    break;
+
+                case -32:
+                    for (int i = 0; i < pixelCount && dataOffset + i * 4 + 3 < buffer.Length; i++)
+                    {
+                        int bits = (buffer[dataOffset + i * 4] << 24) |
+                                   (buffer[dataOffset + i * 4 + 1] << 16) |
+                                   (buffer[dataOffset + i * 4 + 2] << 8) |
+                                    buffer[dataOffset + i * 4 + 3];
+                        float rawValue = BitConverter.Int32BitsToSingle(bits);
+                        pixels[i] = float.IsFinite(rawValue) ? (float)(rawValue * bscale + bzero) : float.NaN;
+                    }
+                    break;
+
+                case -64:
+                    for (int i = 0; i < pixelCount && dataOffset + i * 8 + 7 < buffer.Length; i++)
+                    {
+                        long bits = ((long)buffer[dataOffset + i * 8] << 56) |
+                                    ((long)buffer[dataOffset + i * 8 + 1] << 48) |
+                                    ((long)buffer[dataOffset + i * 8 + 2] << 40) |
+                                    ((long)buffer[dataOffset + i * 8 + 3] << 32) |
+                                    ((long)buffer[dataOffset + i * 8 + 4] << 24) |
+                                    ((long)buffer[dataOffset + i * 8 + 5] << 16) |
+                                    ((long)buffer[dataOffset + i * 8 + 6] << 8) |
+                                     buffer[dataOffset + i * 8 + 7];
+
+                        double rawValue = BitConverter.Int64BitsToDouble(bits);
+                        pixels[i] = double.IsFinite(rawValue) ? (float)(rawValue * bscale + bzero) : float.NaN;
+                    }
+                    break;
+
                 default:
                     throw new NotSupportedException($"Unsupported BITPIX value: {bitpix}");
             }

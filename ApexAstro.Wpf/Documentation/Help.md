@@ -77,6 +77,9 @@ The Auto Select Dialog allows you to automatically select images based on specif
 ## Graph Display
 Clicking the graph icon in the toolbar will display a plot of the metadata values for all of the images in the current folder. This allows for quick visual analysis of trends and outliers in the dataset.
 
+## SNR Display
+The SNR (Signal-to-Noise Ratio) can be calculated for the images in this folder displayed by filter type.  This helps decide how good the data is and how much more data may be required for a goog, better, great final image.  
+
 ## Histogram Panel
 A histogram panel can be shown below the image viewer via the Options menu. The histogram can be displayed in linear or logarithmic scale and automatically updates when you select different images. The histogram panel can be hidden to maximize the image viewing area.
 

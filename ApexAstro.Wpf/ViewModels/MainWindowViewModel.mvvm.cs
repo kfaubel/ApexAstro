@@ -14,6 +14,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Windows.Data;
 using System.Globalization;
+using System.Text.Json;
 
 namespace ApexAstro.Wpf.ViewModels
 {
@@ -38,6 +39,11 @@ namespace ApexAstro.Wpf.ViewModels
         private double _fitScale = 1.0;        // Scale factor when fitting image to window
         private string _currentDirectory = string.Empty;  // Currently opened folder path
         private HistogramViewModel _histogramViewModel = new HistogramViewModel();  // Histogram view model
+        private bool _isDirectoryReviewed;
+        private bool _isLoadingDirectoryReviewedState;
+        private const string ReviewedMarkerFileName = ".aprxastro.reviewed.json";
+        private const string LegacyReviewedMarkerFileName = ".apexastro.reviewed";
+        private string _temporalSnrStatusText = string.Empty;
         #endregion
 
         #region Image Display Properties
@@ -417,6 +423,8 @@ namespace ApexAstro.Wpf.ViewModels
             // Notify that the file count and selection status has changed
             OnPropertyChanged(nameof(FileSelectionStatusText));
             OnPropertyChanged(nameof(StatusBarText));
+            OnPropertyChanged(nameof(CanComputeSnr));
+            System.Windows.Input.CommandManager.InvalidateRequerySuggested();
             
             // Notify the View that files have been loaded so it can update the UI
             FilesLoaded?.Invoke();
@@ -552,6 +560,8 @@ namespace ApexAstro.Wpf.ViewModels
             // Notify that the file count and selection status has changed
             OnPropertyChanged(nameof(FileSelectionStatusText));
             OnPropertyChanged(nameof(StatusBarText));
+            OnPropertyChanged(nameof(CanComputeSnr));
+            System.Windows.Input.CommandManager.InvalidateRequerySuggested();
             
             // Notify the View that files have been loaded so it can update the UI
             FilesLoaded?.Invoke();
@@ -684,9 +694,75 @@ namespace ApexAstro.Wpf.ViewModels
                 {
                     _currentDirectory = value;
                     OnPropertyChanged(nameof(CurrentDirectory));
+                    OnPropertyChanged(nameof(CanMarkDirectoryReviewed));
+                    OnPropertyChanged(nameof(CanComputeSnr));
+                    OnPropertyChanged(nameof(DirectoryReviewedStatusText));
                     OnPropertyChanged(nameof(WindowTitle));
+                    LoadDirectoryReviewedState();
                     OnPropertyChanged(nameof(StatusBarText));
+                    OnPropertyChanged(nameof(TemporalSnrStatusText));
+                    System.Windows.Input.CommandManager.InvalidateRequerySuggested();
                 }
+            }
+        }
+
+        /// <summary>
+        /// Indicates whether the current directory has been reviewed/cleaned up.
+        /// This value is persisted to a marker file in the directory itself.
+        /// </summary>
+        public bool IsDirectoryReviewed
+        {
+            get => _isDirectoryReviewed;
+            set
+            {
+                if (_isDirectoryReviewed != value)
+                {
+                    _isDirectoryReviewed = value;
+                    OnPropertyChanged(nameof(IsDirectoryReviewed));
+                    OnPropertyChanged(nameof(DirectoryReviewedStatusText));
+                    SaveDirectoryReviewedState();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Returns true when there is an open directory where review state can be persisted.
+        /// </summary>
+        public bool CanMarkDirectoryReviewed =>
+            !string.IsNullOrWhiteSpace(CurrentDirectory) && System.IO.Directory.Exists(CurrentDirectory);
+
+        /// <summary>
+        /// Returns true when temporal SNR can be computed for the current folder.
+        /// </summary>
+        public bool CanComputeSnr =>
+            !string.IsNullOrWhiteSpace(CurrentDirectory)
+            && System.IO.Directory.Exists(CurrentDirectory)
+            && FileCount > 0;
+
+        /// <summary>
+        /// Status text shown in the status bar after temporal SNR work completes.
+        /// </summary>
+        public string TemporalSnrStatusText
+        {
+            get => _temporalSnrStatusText;
+            set
+            {
+                if (_temporalSnrStatusText != value)
+                {
+                    _temporalSnrStatusText = value;
+                    OnPropertyChanged(nameof(TemporalSnrStatusText));
+                }
+            }
+        }
+
+        /// <summary>
+        /// User-facing review state text for the status bar.
+        /// </summary>
+        public string DirectoryReviewedStatusText
+        {
+            get
+            {
+                return IsDirectoryReviewed ? "Reviewed" : "Not reviewed";
             }
         }
 
@@ -754,6 +830,122 @@ namespace ApexAstro.Wpf.ViewModels
             }
             
             return $"{len:0.##} {sizes[order]}";
+        }
+
+        private string GetReviewedMarkerFilePath(string directoryPath)
+        {
+            return System.IO.Path.Combine(directoryPath, ReviewedMarkerFileName);
+        }
+
+        private string GetLegacyReviewedMarkerFilePath(string directoryPath)
+        {
+            return System.IO.Path.Combine(directoryPath, LegacyReviewedMarkerFileName);
+        }
+
+        private void LoadDirectoryReviewedState()
+        {
+            bool reviewed = false;
+            if (!string.IsNullOrWhiteSpace(CurrentDirectory) && System.IO.Directory.Exists(CurrentDirectory))
+            {
+                string markerPath = GetReviewedMarkerFilePath(CurrentDirectory);
+                if (System.IO.File.Exists(markerPath))
+                {
+                    reviewed = TryReadReviewedMarker(markerPath, out _);
+                }
+                else
+                {
+                    string legacyMarkerPath = GetLegacyReviewedMarkerFilePath(CurrentDirectory);
+                    if (System.IO.File.Exists(legacyMarkerPath))
+                    {
+                        reviewed = true;
+                        try
+                        {
+                            WriteReviewedMarker(markerPath);
+                            System.IO.File.Delete(legacyMarkerPath);
+                        }
+                        catch (Exception ex)
+                        {
+                            _loggingService.LogError("Directory Review State", $"Failed to migrate legacy review marker in {CurrentDirectory}", ex);
+                        }
+                    }
+                }
+            }
+
+            _isLoadingDirectoryReviewedState = true;
+            try
+            {
+                _isDirectoryReviewed = reviewed;
+                OnPropertyChanged(nameof(IsDirectoryReviewed));
+                OnPropertyChanged(nameof(DirectoryReviewedStatusText));
+            }
+            finally
+            {
+                _isLoadingDirectoryReviewedState = false;
+            }
+        }
+
+        private void SaveDirectoryReviewedState()
+        {
+            if (_isLoadingDirectoryReviewedState)
+                return;
+
+            if (!CanMarkDirectoryReviewed)
+                return;
+
+            string markerPath = GetReviewedMarkerFilePath(CurrentDirectory);
+            try
+            {
+                if (IsDirectoryReviewed)
+                {
+                    WriteReviewedMarker(markerPath);
+                }
+                else if (System.IO.File.Exists(markerPath))
+                {
+                    System.IO.File.Delete(markerPath);
+                }
+            }
+            catch (Exception ex)
+            {
+                _loggingService.LogError("Directory Review State", $"Failed to persist review marker in {CurrentDirectory}", ex);
+            }
+        }
+
+        private static void WriteReviewedMarker(string markerPath)
+        {
+            var marker = new ReviewedMarkerFile
+            {
+                Reviewed = true,
+                ReviewedUtc = DateTime.UtcNow
+            };
+
+            string json = JsonSerializer.Serialize(marker, new JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+
+            System.IO.File.WriteAllText(markerPath, json);
+        }
+
+        private static bool TryReadReviewedMarker(string markerPath, out ReviewedMarkerFile? marker)
+        {
+            marker = null;
+
+            try
+            {
+                string json = System.IO.File.ReadAllText(markerPath);
+                marker = JsonSerializer.Deserialize<ReviewedMarkerFile>(json);
+                return marker?.Reviewed == true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private sealed class ReviewedMarkerFile
+        {
+            public bool Reviewed { get; set; }
+            public DateTime ReviewedUtc { get; set; }
         }
 
         // Navigation commands - these handle moving through the file list
@@ -869,6 +1061,10 @@ namespace ApexAstro.Wpf.ViewModels
                 "Mean" => direction == ListSortDirection.Ascending 
                     ? files.OrderBy(f => f.Mean ?? double.MaxValue).ToList()
                     : files.OrderByDescending(f => f.Mean ?? double.MinValue).ToList(),
+
+                "Frame SNR" => direction == ListSortDirection.Ascending
+                    ? files.OrderBy(f => f.PerFrameSnr ?? double.MaxValue).ToList()
+                    : files.OrderByDescending(f => f.PerFrameSnr ?? double.MinValue).ToList(),
                     
                 "Mark" => direction == ListSortDirection.Ascending 
                     ? files.OrderBy(f => f.IsSelected).ToList()
@@ -979,6 +1175,7 @@ namespace ApexAstro.Wpf.ViewModels
         public RelayCommand ShowFileMetadataCommand { get; }             // Show file metadata dialog
         public RelayCommand MoveSelectedCommand { get; }                 // Move selected files
         public RelayCommand EnterFullScreenCommand { get; }              // Enter full screen mode
+        public RelayCommand ComputeSnrCommand { get; }                   // Compute temporal SNR for current folder
         #endregion
         #region Constructor
         /// <summary>
@@ -1065,6 +1262,7 @@ namespace ApexAstro.Wpf.ViewModels
             PlayPauseCommand = new RelayCommand(_ => TogglePlayPause(), _ => FileCount > 0);
             GotoNextCommand = new RelayCommand(_ => GotoNext(), _ => FileCount > 0);
             GotoLastCommand = new RelayCommand(_ => GotoLast(), _ => FileCount > 0);
+            ComputeSnrCommand = new RelayCommand(_ => ComputeSnrRequested?.Invoke(), _ => CanComputeSnr);
             
             // Zoom commands with inline logic using Math.Min/Max to constrain values
             ZoomInCommand = new RelayCommand(_ => ZoomLevel = Math.Min(ZoomLevel * 1.25, 5.0));  // Max 500%
@@ -1164,6 +1362,11 @@ namespace ApexAstro.Wpf.ViewModels
         /// The View handles this to create the FullScreenWindow with proper owner positioning.
         /// </summary>
         public event Action? EnterFullScreenRequested;
+
+        /// <summary>
+        /// Event that requests the View to compute temporal SNR for the current folder.
+        /// </summary>
+        public event Action? ComputeSnrRequested;
 
         /// <summary>
         /// Event that notifies the View when histogram visibility should change.
@@ -1359,6 +1562,7 @@ namespace ApexAstro.Wpf.ViewModels
                 _appConfig.ShowFilenameTimeColumn,
                 _appConfig.ShowFilenameFrameColumn,
                 _appConfig.ShowMedianColumn,
+                _appConfig.ShowPerFrameSnrColumn,
                 _appConfig.Theme, 
                 _appConfig.ShowFullScreenHelp,
                 _appConfig.PlayPauseInterval,
@@ -1389,6 +1593,11 @@ namespace ApexAstro.Wpf.ViewModels
                     {
                         shouldCalculateMedians = true;
                     }
+                }
+
+                if (result.showPerFrameSnrColumn.HasValue)
+                {
+                    _appConfig.ShowPerFrameSnrColumn = result.showPerFrameSnrColumn.Value;
                 }
                 
                 if (result.theme.HasValue)

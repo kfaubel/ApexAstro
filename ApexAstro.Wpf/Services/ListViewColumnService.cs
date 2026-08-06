@@ -287,6 +287,26 @@ namespace ApexAstro.Wpf.Services
                 gridView.Columns.Add(meanColumn);
             }
 
+            if (_appConfig.ShowPerFrameSnrColumn)
+            {
+                var frameSnrFactory = new FrameworkElementFactory(typeof(System.Windows.Controls.TextBlock));
+                frameSnrFactory.SetBinding(System.Windows.Controls.TextBlock.TextProperty, new System.Windows.Data.Binding("PerFrameSnrDisplay"));
+                frameSnrFactory.SetBinding(System.Windows.Controls.TextBlock.ForegroundProperty, new System.Windows.Data.Binding("PerFrameSnrBrush"));
+                frameSnrFactory.SetValue(System.Windows.Controls.TextBlock.TextAlignmentProperty, System.Windows.TextAlignment.Center);
+                frameSnrFactory.SetValue(System.Windows.Controls.TextBlock.HorizontalAlignmentProperty, System.Windows.HorizontalAlignment.Center);
+                frameSnrFactory.SetValue(System.Windows.Controls.TextBlock.TextTrimmingProperty, System.Windows.TextTrimming.CharacterEllipsis);
+                frameSnrFactory.SetValue(System.Windows.Controls.TextBlock.ToolTipProperty, "Per-frame temporal SNR quality score");
+
+                var frameSnrTemplate = new DataTemplate { VisualTree = frameSnrFactory };
+                var frameSnrColumn = new GridViewColumn
+                {
+                    Header = CreateSortableHeader("Frame SNR"),
+                    Width = 85,
+                    CellTemplate = frameSnrTemplate
+                };
+                gridView.Columns.Add(frameSnrColumn);
+            }
+
             // Custom keyword columns (green) - each has individual width based on keyword length
             foreach (var keyword in _appConfig.CustomKeywords)
             {
@@ -450,6 +470,9 @@ namespace ApexAstro.Wpf.Services
                             case "size":
                                 newWidth = 85; // Fixed width for size column
                                 break;
+                            case "frame snr":
+                                newWidth = 85;
+                                break;
                             case "":
                                 // Button/checkbox columns - keep existing width (usually 30-35px)
                                 newWidth = column.Width < 30 ? 30 : (column.Width > 40 ? 35 : column.Width);
@@ -515,6 +538,9 @@ namespace ApexAstro.Wpf.Services
                         break;
                     case "size":
                         content = FormatFileSize(item.Size);
+                        break;
+                    case "frame snr":
+                        content = item.PerFrameSnrDisplay;
                         break;
                     default:
                         // Keyword column - check custom, FITS, and CSV/session metadata values.
@@ -651,6 +677,7 @@ namespace ApexAstro.Wpf.Services
             widths["Time"] = 85;
             widths["Frame"] = 60;
             widths["Size"] = 85;       // Fixed width for size column
+            widths["Frame SNR"] = 85;
             
             // Custom and FITS keyword columns - data-driven widths based on actual content
             foreach (var keyword in _appConfig.CustomKeywords)

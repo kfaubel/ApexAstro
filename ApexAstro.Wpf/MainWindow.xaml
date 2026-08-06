@@ -101,12 +101,13 @@
                     <!-- Separator -->
                     <Rectangle Width="1" Fill="{DynamicResource ThemeBorderBrush}" Margin="6,4"/>
 
-                    <!-- Help Button -->
-                    <Button Click="About_Click" 
-                            ToolTip="Help&#10;View application information and documentation"
+                    <!-- SNR Button -->
+                    <Button Name="ComputeSnrButtonToolbar"
+                            Command="{Binding ComputeSnrCommand}"
+                            ToolTip="SNR&#10;Compute temporal SNR for the current folder"
                             Style="{StaticResource ToolbarButtonStyle}"
                             Margin="2,0">
-                        <Path Data="M15.07,11.25L14.17,12.17C13.45,12.89 13,13.5 13,15H11V14.5C11,13.39 11.45,12.39 12.17,11.67L13.41,10.41C13.78,10.05 14,9.55 14,9C14,7.89 13.1,7 12,7A2,2 0 0,0 10,9H8A4,4 0 0,1 12,5A4,4 0 0,1 16,9C16,9.88 15.64,10.67 15.07,11.25M13,19H11V17H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12C22,6.47 17.5,2 12,2Z" 
+                        <Path Data="M3,17H6V13H3M8,17H11V7H8M13,17H16V10H13M18,17H21V4H18" 
                               Fill="{DynamicResource ThemeButtonForeground}" 
                               Width="20" Height="20" 
                               Stretch="Uniform"/>
@@ -123,6 +124,70 @@
                             Margin="2,0"
                             Visibility="Collapsed">
                         <Path Data="M4,4H20A2,2 0 0,1 22,6V18A2,2 0 0,1 20,20H4A2,2 0 0,1 2,18V6A2,2 0 0,1 4,4M4,6V18H11V6H4M20,18V6H18V18H20M13,6V18H16V6H13Z" 
+                              Fill="{DynamicResource ThemeButtonForeground}" 
+                              Width="20" Height="20" 
+                              Stretch="Uniform"/>
+                    </Button>
+
+                    <ToggleButton Margin="8,0,2,0"
+                                  VerticalAlignment="Center"
+                                  FontSize="14"
+                                  FontWeight="SemiBold"
+                                  IsChecked="{Binding IsDirectoryReviewed, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  IsEnabled="{Binding CanMarkDirectoryReviewed}"
+                                  Content="{Binding DirectoryReviewedStatusText}"
+                                  ToolTip="Click to mark this folder as reviewed">
+                        <ToggleButton.Style>
+                            <Style TargetType="ToggleButton">
+                                <Setter Property="Background" Value="#1F6FEB" />
+                                <Setter Property="Foreground" Value="White" />
+                                <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
+                                <Setter Property="BorderThickness" Value="1" />
+                                <Setter Property="Padding" Value="12,6" />
+                                <Setter Property="Cursor" Value="Hand" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Border x:Name="border"
+                                                    Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                    CornerRadius="3"
+                                                    SnapsToDevicePixels="True">
+                                                <ContentPresenter Margin="{TemplateBinding Padding}"
+                                                                  HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center"
+                                                                  RecognizesAccessKey="True"
+                                                                  TextElement.Foreground="{TemplateBinding Foreground}"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource ThemeButtonBackgroundHover}" />
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource ThemeButtonBackgroundPressed}" />
+                                                </Trigger>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter Property="Background" Value="#2E8B57" />
+                                                    <Setter Property="Foreground" Value="White" />
+                                                </Trigger>
+                                                <Trigger Property="IsEnabled" Value="False">
+                                                    <Setter Property="Opacity" Value="0.5" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ToggleButton.Style>
+                    </ToggleButton>
+
+                    <!-- Help Button -->
+                    <Button Click="About_Click" 
+                            ToolTip="Help&#10;View application information and documentation"
+                            Style="{StaticResource ToolbarButtonStyle}"
+                            Margin="2,0">
+                        <Path Data="M15.07,11.25L14.17,12.17C13.45,12.89 13,13.5 13,15H11V14.5C11,13.39 11.45,12.39 12.17,11.67L13.41,10.41C13.78,10.05 14,9.55 14,9C14,7.89 13.1,7 12,7A2,2 0 0,0 10,9H8A4,4 0 0,1 12,5A4,4 0 0,1 16,9C16,9.88 15.64,10.67 15.07,11.25M13,19H11V17H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12C22,6.47 17.5,2 12,2Z" 
                               Fill="{DynamicResource ThemeButtonForeground}" 
                               Width="20" Height="20" 
                               Stretch="Uniform"/>
@@ -154,7 +219,6 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     
                     <!-- Auto Select Button -->
@@ -164,7 +228,7 @@
                     
                     <!-- Move Selected Button - Left Aligned -->
                     <Button Name="MoveSelectedButton" Grid.Column="1" Content="Move selected..." 
-                            Command="{Binding MoveSelectedCommand}" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,4,4,4"
+                            Click="MoveSelectedButton_Click" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,4,4,4"
                             ToolTip="Move Files&#10;Move marked files to a folder or the Recycle Bin" />
                     
                     <!-- Select All Button -->
@@ -176,9 +240,94 @@
                     <Button Name="ClearAllButton" Grid.Column="3" Content="Clear All" 
                             Click="ClearAllButton_Click" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,4,8,4" 
                             ToolTip="Clear all selections"/>
-                    
-                    <!-- Navigation Buttons - Center Aligned -->
-                    <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="4">
+
+                </Grid>
+                
+                <!-- File List with Scrollbar -->
+                <ListView Name="FileListView" Grid.Row="1" Margin="4,0,4,4" FontSize="13"
+                          Background="{DynamicResource ThemeListViewBackground}"
+                          Foreground="{DynamicResource ThemeForeground}"
+                          BorderBrush="{DynamicResource ThemeBorderBrush}">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
+                            <Setter Property="ToolTip" Value="{Binding Name}"/>
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.SelectedIndex>
+                        <Binding Path="SelectedIndex" Mode="TwoWay"/>
+                    </ListView.SelectedIndex>
+                    <ListView.View>
+                        <GridView AllowsColumnReorder="True">
+                            <!-- Dynamic columns are created in code-behind -->
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </Grid>
+
+            <!-- Resize / Handle -->
+            <GridSplitter Name="ColumnSplitter" Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="#DDD" />
+
+            <!-- Main Content -->
+            <Grid Name="ImageContentGrid" Grid.Column="2">
+
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*" MinHeight="200"/>
+                    <RowDefinition Name="HistogramSplitterRow" Height="Auto"/>
+                    <RowDefinition Name="HistogramRow" Height="200" MinHeight="100"/>
+                </Grid.RowDefinitions>
+
+                <!-- Image View Controls -->
+                <Grid Name="ImageControlsGrid" Grid.Row="0" Margin="8,8,8,8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,4">
+                        <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" HorizontalAlignment="Left">
+                            <Button Content="-" Width="40" Margin="4" Command="{Binding ZoomOutCommand}" ToolTip="Zoom out (Ctrl+-)" />
+                            <Button Content="+" Width="40" Margin="4" Command="{Binding ZoomInCommand}" ToolTip="Zoom in (Ctrl++)" />
+                            <Button Content="1:1" Width="50" Margin="4" Command="{Binding ZoomActualCommand}" ToolTip="Zoom to 100%" />
+                            <Button Content="Fit" Width="50" Margin="4" Command="{Binding FitToWindowCommand}" ToolTip="Fit to Window&#10;Scale image to fit current view" />
+                            <TextBlock Text="{Binding ZoomDisplayText}" VerticalAlignment="Center" Margin="8"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" HorizontalAlignment="Right">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
+                                <TextBlock Text="Stretch:" VerticalAlignment="Center" Margin="4,0,6,0"/>
+                                <Slider Minimum="0" Maximum="10" SmallChange="1" LargeChange="1" TickFrequency="1"
+                                        IsSnapToTickEnabled="True" Width="140"
+                                        Value="{Binding StretchAggressiveness, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                        VerticalAlignment="Center"
+                                        ToolTip="Stretch aggressiveness"/>
+                                <TextBlock Text="{Binding StretchDisplayText}"
+                                           VerticalAlignment="Center"
+                                           Width="28"
+                                           TextAlignment="Center"
+                                           Margin="6,0,0,0"/>
+                            </StackPanel>
+
+                            <Button Width="36" Height="32" Margin="4"
+                                    Click="FloatButton_Click"
+                                    ToolTip="Float Windows&#10;Detach image and histogram panes">
+                                <Path Data="M2,4V16H10V20H22V8H14V4H2M4,6H12V14H4V6M14,10H20V18H12V16H14V10Z"
+                                      Fill="{DynamicResource ThemeButtonForeground}"
+                                      Stretch="Uniform"
+                                      Width="18" Height="18"/>
+                            </Button>
+                            <Button Width="36" Height="32" Margin="4"
+                                    Command="{Binding EnterFullScreenCommand}"
+                                    ToolTip="Full Screen (F11)&#10;Toggle full-screen slideshow mode">
+                                <Path Data="M5,5H10V7H7V10H5V5M14,5H19V10H17V7H14V5M17,14H19V19H14V17H17V14M10,17V19H5V14H7V17H10Z"
+                                      Fill="{DynamicResource ThemeButtonForeground}"
+                                      Stretch="Uniform"
+                                      Width="18" Height="18"/>
+                            </Button>
+                        </StackPanel>
+                    </DockPanel>
+
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2,0,0">
                         <Button Name="GotoFirst" Width="40" Margin="2" Command="{Binding GotoFirstCommand}" ToolTip="Go to first image (Home)">
                             <Grid Width="20" Height="16">
                                 <Rectangle Width="2" Height="14" Fill="{DynamicResource ThemeButtonForeground}" HorizontalAlignment="Left" Margin="2,0,0,0"/>
@@ -221,86 +370,6 @@
                                 <Path Width="12" Height="14" Stretch="Uniform" Fill="{DynamicResource ThemeButtonForeground}" Data="M 2,2 L 10,8 L 2,14 Z" HorizontalAlignment="Left" Margin="2,0,0,0"/>
                                 <Rectangle Width="2" Height="14" Fill="{DynamicResource ThemeButtonForeground}" HorizontalAlignment="Right" Margin="0,0,2,0"/>
                             </Grid>
-                        </Button>
-                    </StackPanel>
-
-                </Grid>
-                
-                <!-- File List with Scrollbar -->
-                <ListView Name="FileListView" Grid.Row="1" Margin="4,0,4,4" FontSize="13"
-                          Background="{DynamicResource ThemeListViewBackground}"
-                          Foreground="{DynamicResource ThemeForeground}"
-                          BorderBrush="{DynamicResource ThemeBorderBrush}">
-                    <ListView.ItemContainerStyle>
-                        <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
-                            <Setter Property="ToolTip" Value="{Binding Name}"/>
-                        </Style>
-                    </ListView.ItemContainerStyle>
-                    <ListView.SelectedIndex>
-                        <Binding Path="SelectedIndex" Mode="TwoWay"/>
-                    </ListView.SelectedIndex>
-                    <ListView.View>
-                        <GridView AllowsColumnReorder="True">
-                            <!-- Dynamic columns are created in code-behind -->
-                        </GridView>
-                    </ListView.View>
-                </ListView>
-            </Grid>
-
-            <!-- Resize / Handle -->
-            <GridSplitter Name="ColumnSplitter" Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="#DDD" />
-
-            <!-- Main Content -->
-            <Grid Name="ImageContentGrid" Grid.Column="2">
-
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*" MinHeight="200"/>
-                    <RowDefinition Name="HistogramSplitterRow" Height="Auto"/>
-                    <RowDefinition Name="HistogramRow" Height="200" MinHeight="100"/>
-                </Grid.RowDefinitions>
-
-                <!-- Image View Controls -->
-                <Grid Name="ImageControlsGrid" Grid.Row="0" Margin="8,8,8,8">
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                        <Button Content="-" Width="40" Margin="4" Command="{Binding ZoomOutCommand}" ToolTip="Zoom out (Ctrl+-)" />
-                        <Button Content="+" Width="40" Margin="4" Command="{Binding ZoomInCommand}" ToolTip="Zoom in (Ctrl++)" />
-                        <Button Content="1:1" Width="50" Margin="4" Command="{Binding ZoomActualCommand}" ToolTip="Zoom to 100%" />
-                        <Button Content="Fit" Width="50" Margin="4" Command="{Binding FitToWindowCommand}" ToolTip="Fit to Window&#10;Scale image to fit current view" />
-                        <TextBlock Text="{Binding ZoomDisplayText}" VerticalAlignment="Center" Margin="8"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <!-- Auto Stretch Control -->
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0,8,0">
-                            <TextBlock Text="Stretch:" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                            <Button Content="-" Width="24" Height="24" Margin="2" 
-                                    Command="{Binding DecreaseStretchCommand}"
-                                    ToolTip="Decrease stretch aggressiveness"/>
-                            <TextBlock Text="{Binding StretchDisplayText}" 
-                                       VerticalAlignment="Center" 
-                                       HorizontalAlignment="Center"
-                                       Width="24"
-                                       TextAlignment="Center"
-                                       Margin="2"/>
-                            <Button Content="+" Width="24" Height="24" Margin="2" 
-                                    Command="{Binding IncreaseStretchCommand}"
-                                    ToolTip="Increase stretch aggressiveness"/>
-                        </StackPanel>
-                        <Button Width="36" Height="32" Margin="4" 
-                                Click="FloatButton_Click"
-                                ToolTip="Float Windows&#10;Detach image and histogram panes">
-                            <Path Data="M2,4V16H10V20H22V8H14V4H2M4,6H12V14H4V6M14,10H20V18H12V16H14V10Z" 
-                                  Fill="{DynamicResource ThemeButtonForeground}" 
-                                  Stretch="Uniform" 
-                                  Width="18" Height="18"/>
-                        </Button>
-                        <Button Width="36" Height="32" Margin="4" 
-                                Command="{Binding EnterFullScreenCommand}"
-                                ToolTip="Full Screen (F11)&#10;Toggle full-screen slideshow mode">
-                            <Path Data="M5,5H10V7H7V10H5V5M14,5H19V10H17V7H14V5M17,14H19V19H14V17H17V14M10,17V19H5V14H7V17H10Z" 
-                                  Fill="{DynamicResource ThemeButtonForeground}" 
-                                  Stretch="Uniform" 
-                                  Width="18" Height="18"/>
                         </Button>
                     </StackPanel>
                 </Grid>
@@ -350,8 +419,18 @@
                    Padding="8,4">
             <StatusBarItem>
                 <TextBlock Text="{Binding StatusBarText}" 
-                           FontSize="11"
-                           Foreground="{DynamicResource ThemeSecondaryText}"/>
+                           FontSize="13"
+                           Foreground="{DynamicResource ThemeForeground}"/>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem HorizontalAlignment="Right">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding TemporalSnrStatusText}"
+                               FontSize="13"
+                               Foreground="{DynamicResource ThemeForeground}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                </StackPanel>
             </StatusBarItem>
         </StatusBar>
     </Grid>

@@ -69,6 +69,9 @@
                                  Margin="0,5"
                                  Checked="ShowMedianColumnCheckBox_CheckedChanged"
                                  Unchecked="ShowMedianColumnCheckBox_CheckedChanged"/>
+                        <CheckBox Name="ShowPerFrameSnrColumnCheckBox"
+                                 Content="Show per-frame SNR in the file list"
+                                 Margin="0,5"/>
                         <StackPanel Name="MedianFormatPanel" Margin="25,5,0,5" IsEnabled="False">
                             <RadioButton Name="MedianNormalizedRadioButton" 
                                          Content="Normalized (0.0-1.0)" 

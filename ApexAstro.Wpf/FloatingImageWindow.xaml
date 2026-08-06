@@ -16,6 +16,7 @@
         <KeyBinding Key="Right" Command="{Binding GotoNextCommand}" />
         <KeyBinding Key="Home" Command="{Binding GotoFirstCommand}" />
         <KeyBinding Key="End" Command="{Binding GotoLastCommand}" />
+        <KeyBinding Key="Space" Command="{Binding PlayPauseCommand}" />
         <KeyBinding Key="Add" Command="{Binding ZoomInCommand}" />
         <KeyBinding Key="Subtract" Command="{Binding ZoomOutCommand}" />
         <KeyBinding Key="OemPlus" Command="{Binding ZoomInCommand}" />
@@ -29,52 +30,104 @@
 
         <!-- Image View Controls -->
         <Grid Name="ImageControlsGrid" Grid.Row="0" Margin="8,8,8,8">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                <Button Content="-" Width="40" Margin="4" Command="{Binding ZoomOutCommand}" />
-                <Button Content="+" Width="40" Margin="4" Command="{Binding ZoomInCommand}" />
-                <Button Content="1:1" Width="50" Margin="4" Command="{Binding ZoomActualCommand}" />
-                <Button Content="Fit" Width="50" Margin="4" Command="{Binding FitToWindowCommand}" />
-                <TextBlock Text="{Binding ZoomDisplayText}" 
-                           VerticalAlignment="Center" 
-                           Margin="8"
-                           Foreground="{DynamicResource ThemeForeground}"/>
-            </StackPanel>
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <!-- Auto Stretch Control -->
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0,8,0">
-                    <TextBlock Text="Stretch:" 
-                               VerticalAlignment="Center" 
-                               Margin="0,0,4,0"
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,4">
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" HorizontalAlignment="Left">
+                    <Button Content="-" Width="40" Margin="4" Command="{Binding ZoomOutCommand}" />
+                    <Button Content="+" Width="40" Margin="4" Command="{Binding ZoomInCommand}" />
+                    <Button Content="1:1" Width="50" Margin="4" Command="{Binding ZoomActualCommand}" />
+                    <Button Content="Fit" Width="50" Margin="4" Command="{Binding FitToWindowCommand}" />
+                    <TextBlock Text="{Binding ZoomDisplayText}"
+                               VerticalAlignment="Center"
+                               Margin="8"
                                Foreground="{DynamicResource ThemeForeground}"/>
-                    <Button Content="-" Width="24" Height="24" Margin="2" 
-                            Command="{Binding DecreaseStretchCommand}"
-                            ToolTip="Decrease stretch aggressiveness"/>
-                    <TextBlock Text="{Binding StretchDisplayText}" 
-                               VerticalAlignment="Center" 
-                               HorizontalAlignment="Center"
-                               Width="24"
-                               TextAlignment="Center"
-                               Margin="2"
-                               Foreground="{DynamicResource ThemeForeground}"/>
-                    <Button Content="+" Width="24" Height="24" Margin="2" 
-                            Command="{Binding IncreaseStretchCommand}"
-                            ToolTip="Increase stretch aggressiveness"/>
                 </StackPanel>
-                <Button Width="36" Height="32" Margin="4" 
-                        Click="FullScreenButton_Click"
-                        ToolTip="Enter full screen mode (F11)">
-                    <Path Data="M5,5H10V7H7V10H5V5M14,5H19V10H17V7H14V5M17,14H19V19H14V17H17V14M10,17V19H5V14H7V17H10Z" 
-                          Fill="{DynamicResource ThemeButtonForeground}" 
-                          Stretch="Uniform" 
-                          Width="18" Height="18"/>
+
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" HorizontalAlignment="Right">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
+                        <TextBlock Text="Stretch:"
+                                   VerticalAlignment="Center"
+                                   Margin="4,0,6,0"
+                                   Foreground="{DynamicResource ThemeForeground}"/>
+                        <Slider Minimum="0" Maximum="10" SmallChange="1" LargeChange="1" TickFrequency="1"
+                                IsSnapToTickEnabled="True" Width="140"
+                                Value="{Binding StretchAggressiveness, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                VerticalAlignment="Center"
+                                ToolTip="Stretch aggressiveness"/>
+                        <TextBlock Text="{Binding StretchDisplayText}"
+                                   VerticalAlignment="Center"
+                                   Width="28"
+                                   TextAlignment="Center"
+                                   Margin="6,0,0,0"
+                                   Foreground="{DynamicResource ThemeForeground}"/>
+                    </StackPanel>
+
+                    <Button Width="36" Height="32" Margin="4"
+                            Click="FullScreenButton_Click"
+                            ToolTip="Enter full screen mode (F11)">
+                        <Path Data="M5,5H10V7H7V10H5V5M14,5H19V10H17V7H14V5M17,14H19V19H14V17H17V14M10,17V19H5V14H7V17H10Z"
+                              Fill="{DynamicResource ThemeButtonForeground}"
+                              Stretch="Uniform"
+                              Width="18" Height="18"/>
+                    </Button>
+                    <Button Width="36" Height="32" Margin="4"
+                            Click="DockBackButton_Click"
+                            ToolTip="Dock image and histogram back to main window">
+                        <Path Data="M4,4H20A2,2 0 0,1 22,6V18A2,2 0 0,1 20,20H4A2,2 0 0,1 2,18V6A2,2 0 0,1 4,4M4,6V18H11V6H4M20,18V6H18V18H20M13,6V18H16V6H13Z"
+                              Fill="{DynamicResource ThemeButtonForeground}"
+                              Stretch="Uniform"
+                              Width="18" Height="18"/>
+                    </Button>
+                </StackPanel>
+            </DockPanel>
+
+            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2,0,0">
+                <Button Width="40" Margin="2" Command="{Binding GotoFirstCommand}" ToolTip="Go to first image (Home)">
+                    <Grid Width="20" Height="16">
+                        <Rectangle Width="2" Height="14" Fill="{DynamicResource ThemeButtonForeground}" HorizontalAlignment="Left" Margin="2,0,0,0"/>
+                        <Path Width="12" Height="14" Stretch="Uniform" Fill="{DynamicResource ThemeButtonForeground}" Data="M 10,2 L 2,8 L 10,14 Z" HorizontalAlignment="Right" Margin="0,0,2,0"/>
+                    </Grid>
                 </Button>
-                <Button Width="36" Height="32" Margin="4" 
-                        Click="DockBackButton_Click"
-                        ToolTip="Dock image and histogram back to main window">
-                    <Path Data="M4,4H20A2,2 0 0,1 22,6V18A2,2 0 0,1 20,20H4A2,2 0 0,1 2,18V6A2,2 0 0,1 4,4M4,6V18H11V6H4M20,18V6H18V18H20M13,6V18H16V6H13Z" 
-                          Fill="{DynamicResource ThemeButtonForeground}" 
-                          Stretch="Uniform" 
-                          Width="18" Height="18"/>
+                <Button Width="40" Margin="2" Command="{Binding GotoPreviousCommand}" ToolTip="Go to previous image (Left Arrow)">
+                    <Path Width="20" Height="20" Stretch="Uniform" Fill="{DynamicResource ThemeButtonForeground}" Data="M 15,2 L 5,10 L 15,18" />
+                </Button>
+                <Button Width="40" Margin="2" Command="{Binding PlayPauseCommand}" ToolTip="Play / pause slideshow (Space)">
+                    <ContentControl>
+                        <ContentControl.Style>
+                            <Style TargetType="ContentControl">
+                                <Setter Property="Content">
+                                    <Setter.Value>
+                                        <Path Width="20" Height="20" Stretch="Uniform" Fill="{DynamicResource ThemeButtonForeground}" Data="M 6,4 L 18,10 L 6,16 Z" />
+                                    </Setter.Value>
+                                </Setter>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsPlaying}" Value="True">
+                                        <Setter Property="Content">
+                                            <Setter.Value>
+                                                <Grid Width="16" Height="16">
+                                                    <Rectangle Width="5" Height="14" Fill="{DynamicResource ThemeButtonForeground}" RadiusX="1" RadiusY="1" HorizontalAlignment="Left" Margin="2,0,0,0"/>
+                                                    <Rectangle Width="5" Height="14" Fill="{DynamicResource ThemeButtonForeground}" RadiusX="1" RadiusY="1" HorizontalAlignment="Right" Margin="0,0,2,0"/>
+                                                </Grid>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ContentControl.Style>
+                    </ContentControl>
+                </Button>
+                <Button Width="40" Margin="2" Command="{Binding GotoNextCommand}" ToolTip="Go to next image (Right Arrow)">
+                    <Path Width="20" Height="20" Stretch="Uniform" Fill="{DynamicResource ThemeButtonForeground}" Data="M 5,2 L 15,10 L 5,18" />
+                </Button>
+                <Button Width="40" Margin="2" Command="{Binding GotoLastCommand}" ToolTip="Go to last image (End)">
+                    <Grid Width="20" Height="16">
+                        <Path Width="12" Height="14" Stretch="Uniform" Fill="{DynamicResource ThemeButtonForeground}" Data="M 2,2 L 10,8 L 2,14 Z" HorizontalAlignment="Left" Margin="2,0,0,0"/>
+                        <Rectangle Width="2" Height="14" Fill="{DynamicResource ThemeButtonForeground}" HorizontalAlignment="Right" Margin="0,0,2,0"/>
+                    </Grid>
                 </Button>
             </StackPanel>
         </Grid>

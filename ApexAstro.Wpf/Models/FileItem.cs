@@ -17,6 +17,9 @@ namespace ApexAstro.Wpf.Models
         private string _filenameDate = string.Empty;
         private string _filenameTime = string.Empty;
         private string _FilenameFrame = string.Empty;
+        private double? _perFrameSnr;
+        private string _perFrameSnrGrade = string.Empty;
+        private System.Windows.Media.Brush _perFrameSnrBrush = System.Windows.Media.Brushes.Transparent;
 
         public string Name
         {
@@ -110,6 +113,48 @@ namespace ApexAstro.Wpf.Models
             }
         }
         public string Path { get; set; } = string.Empty;
+
+        public double? PerFrameSnr
+        {
+            get => _perFrameSnr;
+            set
+            {
+                if (_perFrameSnr != value)
+                {
+                    _perFrameSnr = value;
+                    OnPropertyChanged(nameof(PerFrameSnr));
+                    OnPropertyChanged(nameof(PerFrameSnrDisplay));
+                }
+            }
+        }
+
+        public string PerFrameSnrDisplay => PerFrameSnr.HasValue ? PerFrameSnr.Value.ToString("F2") : string.Empty;
+
+        public string PerFrameSnrGrade
+        {
+            get => _perFrameSnrGrade;
+            set
+            {
+                if (_perFrameSnrGrade != value)
+                {
+                    _perFrameSnrGrade = value;
+                    OnPropertyChanged(nameof(PerFrameSnrGrade));
+                }
+            }
+        }
+
+        public System.Windows.Media.Brush PerFrameSnrBrush
+        {
+            get => _perFrameSnrBrush;
+            set
+            {
+                if (_perFrameSnrBrush != value)
+                {
+                    _perFrameSnrBrush = value;
+                    OnPropertyChanged(nameof(PerFrameSnrBrush));
+                }
+            }
+        }
         
         public bool IsSelected 
         { 

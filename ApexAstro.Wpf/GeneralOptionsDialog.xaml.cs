@@ -64,6 +64,11 @@ namespace ApexAstro.Wpf
         /// Property to track whether to show the histogram panel.
         /// </summary>
         public bool ShowHistogram { get; set; }
+
+        /// <summary>
+        /// Property to track whether per-frame SNR should be shown in the file list.
+        /// </summary>
+        public bool ShowPerFrameSnrColumn { get; set; }
         
         /// <summary>
         /// Property to track whether to scan XISF files for FITS keywords.
@@ -137,7 +142,7 @@ namespace ApexAstro.Wpf
         /// <param name="scanXisfForFitsKeywords">Current value of the ScanXisfForFitsKeywords setting</param>
         /// <param name="medianDisplayMode">Current median display mode setting</param>
         /// <param name="showHistogram">Current value of the ShowHistogram setting</param>
-        public GeneralOptionsDialog(bool showSizeColumn, bool showFullFilename, bool showFilenameDateColumn, bool showFilenameTimeColumn, bool showFilenameFrameColumn, bool showMedianColumn, ThemeMode theme, bool showFullScreenHelp, double playPauseInterval, bool scanXisfForFitsKeywords, MedianDisplayMode medianDisplayMode, bool showHistogram) : this()
+        public GeneralOptionsDialog(bool showSizeColumn, bool showFullFilename, bool showFilenameDateColumn, bool showFilenameTimeColumn, bool showFilenameFrameColumn, bool showMedianColumn, ThemeMode theme, bool showFullScreenHelp, double playPauseInterval, bool scanXisfForFitsKeywords, MedianDisplayMode medianDisplayMode, bool showHistogram, bool showPerFrameSnrColumn) : this()
         {
             // Store the initial values in our properties
             ShowSizeColumn = showSizeColumn;
@@ -152,6 +157,7 @@ namespace ApexAstro.Wpf
             ScanXisfForFitsKeywords = scanXisfForFitsKeywords;
             MedianDisplayMode = medianDisplayMode;
             ShowHistogram = showHistogram;
+            ShowPerFrameSnrColumn = showPerFrameSnrColumn;
             
             // Set the checkbox state to match the current setting
             // ShowSizeColumnCheckBox is a UI control defined in the XAML file
@@ -163,6 +169,7 @@ namespace ApexAstro.Wpf
             ShowMedianColumnCheckBox.IsChecked = showMedianColumn;
             ScanXisfForFitsKeywordsCheckBox.IsChecked = scanXisfForFitsKeywords;
             ShowHistogramCheckBox.IsChecked = showHistogram;
+            ShowPerFrameSnrColumnCheckBox.IsChecked = showPerFrameSnrColumn;
             
             // Set the median display mode radio buttons
             if (medianDisplayMode == MedianDisplayMode.Normalized)
@@ -315,6 +322,7 @@ namespace ApexAstro.Wpf
             ShowMedianColumn = ShowMedianColumnCheckBox.IsChecked ?? false;
             ScanXisfForFitsKeywords = ScanXisfForFitsKeywordsCheckBox.IsChecked ?? false;
             ShowHistogram = ShowHistogramCheckBox.IsChecked ?? false;
+            ShowPerFrameSnrColumn = ShowPerFrameSnrColumnCheckBox.IsChecked ?? false;
             
             // Read the median display mode from radio buttons
             MedianDisplayMode = (MedianNormalizedRadioButton.IsChecked ?? true) 

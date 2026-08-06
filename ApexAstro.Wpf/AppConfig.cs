@@ -291,6 +291,26 @@ namespace ApexAstro.Wpf
         public List<AutoSelectCriteriaSetting> AutoSelectCriteria { get; set; } = new List<AutoSelectCriteriaSetting>();
 
         /// <summary>
+        /// Whether to show the per-frame SNR quality column in the file list.
+        /// </summary>
+        public bool ShowPerFrameSnrColumn { get; set; } = false;
+
+        /// <summary>
+        /// Keep-best threshold (percent) used to classify per-frame SNR values.
+        /// </summary>
+        public double PerFrameSnrKeepBestPercent { get; set; } = 80.0;
+
+        /// <summary>
+        /// Whether Auto Select should additionally mark the bottom x% by per-frame SNR.
+        /// </summary>
+        public bool AutoSelectMarkBottomPerFrameSnr { get; set; } = false;
+
+        /// <summary>
+        /// Bottom percent used for Auto Select per-frame SNR marking.
+        /// </summary>
+        public double AutoSelectBottomPerFrameSnrPercent { get; set; } = 20.0;
+
+        /// <summary>
         /// Static field containing the full path where the configuration file is stored.
         /// Uses the user's AppData folder which is standard for application settings on Windows.
         /// Example path: C:\Users\[username]\AppData\Roaming\ApexAstro\app-config.json

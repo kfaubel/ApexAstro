@@ -1,0 +1,160 @@
+<Window x:Class="ApexAstro.Wpf.TemporalSnrPreflightDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Compute Temporal SNR"
+        Width="760"
+        MinWidth="700"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize"
+        Background="{DynamicResource ThemeWindowBackground}"
+        Foreground="{DynamicResource ThemeForeground}">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Text="This will compute a pixel-by-pixel temporal SNR map for the current folder."
+                   FontSize="16"
+                   FontWeight="SemiBold"
+                   Margin="0,0,0,10"
+                   TextWrapping="Wrap"/>
+
+        <Border Grid.Row="1"
+                Background="{DynamicResource ThemeControlBackground}"
+                BorderBrush="{DynamicResource ThemeBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="4"
+                Padding="12"
+                Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="Estimated run time"
+                           FontWeight="SemiBold"
+                           Margin="0,0,0,6"/>
+                <TextBlock Text="{Binding EstimateText}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                <TextBlock Text="{Binding HardwareText}" TextWrapping="Wrap" Foreground="{DynamicResource ThemeSecondaryText}"/>
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="2"
+                Background="{DynamicResource ThemeControlBackground}"
+                BorderBrush="{DynamicResource ThemeBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="4"
+                Padding="12"
+                Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="Current folder SNR"
+                           FontWeight="SemiBold"
+                           Margin="0,0,0,8"/>
+                <TextBlock Text="{Binding CurrentResultsSummaryText}"
+                           TextWrapping="Wrap"
+                           Margin="0,0,0,8"/>
+
+                <Border Visibility="{Binding HasCurrentResults, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        Background="{DynamicResource ThemeSidebarBackground}"
+                        BorderBrush="{DynamicResource ThemeBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="8"
+                        Margin="0,0,0,6">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="70"/>
+                                <ColumnDefinition Width="70"/>
+                                <ColumnDefinition Width="70"/>
+                                <ColumnDefinition Width="70"/>
+                                <ColumnDefinition Width="90"/>
+                                <ColumnDefinition Width="110"/>
+                                <ColumnDefinition Width="70"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Filter" FontWeight="SemiBold" Grid.Column="0"/>
+                            <TextBlock Text="Median" FontWeight="SemiBold" TextAlignment="Right" Grid.Column="1"/>
+                            <TextBlock Text="Mean" FontWeight="SemiBold" TextAlignment="Right" Grid.Column="2"/>
+                            <TextBlock Text="StdDev" FontWeight="SemiBold" TextAlignment="Right" Grid.Column="3"/>
+                            <TextBlock Text="CV" FontWeight="SemiBold" TextAlignment="Right" Grid.Column="4"/>
+                            <TextBlock Text="Grade" FontWeight="SemiBold" TextAlignment="Center" Grid.Column="5"/>
+                            <TextBlock Text="Target" FontWeight="SemiBold" TextAlignment="Left" Grid.Column="6"/>
+                            <TextBlock Text="Frames" FontWeight="SemiBold" TextAlignment="Right" Grid.Column="7"/>
+                        </Grid>
+
+                        <ItemsControl ItemsSource="{Binding CurrentResults}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,1">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="70"/>
+                                            <ColumnDefinition Width="70"/>
+                                            <ColumnDefinition Width="70"/>
+                                            <ColumnDefinition Width="70"/>
+                                            <ColumnDefinition Width="90"/>
+                                            <ColumnDefinition Width="110"/>
+                                            <ColumnDefinition Width="70"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding FilterName}" Grid.Column="0"/>
+                                        <TextBlock Text="{Binding MedianTemporalSnr, StringFormat={}{0:F2}}" TextAlignment="Right" Grid.Column="1"/>
+                                        <TextBlock Text="{Binding MeanTemporalSnr, StringFormat={}{0:F2}}" TextAlignment="Right" Grid.Column="2"/>
+                                        <TextBlock Text="{Binding StandardDeviationTemporalSnr, StringFormat={}{0:F2}}" TextAlignment="Right" Grid.Column="3"/>
+                                        <TextBlock Text="{Binding CvDisplay}" TextAlignment="Right" Grid.Column="4"/>
+                                        <StackPanel Grid.Column="5" Orientation="Horizontal" HorizontalAlignment="Center">
+                                            <Ellipse Width="10" Height="10" Fill="{Binding CvGradeBrush}" Margin="0,0,5,0"/>
+                                            <TextBlock Text="{Binding CvGrade}" Foreground="{Binding CvGradeBrush}"/>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding TargetDataGuidance}" Grid.Column="6"/>
+                                        <TextBlock Text="{Binding FrameCount}" TextAlignment="Right" Grid.Column="7"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="{Binding ComputeStepsText}"
+                           Visibility="{Binding ShowComputeSteps, Converter={StaticResource BooleanToVisibilityConverter}}"
+                           TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="3"
+                Background="{DynamicResource ThemeControlBackground}"
+                BorderBrush="{DynamicResource ThemeBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="4"
+                Padding="12"
+                Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="Options"
+                           FontWeight="SemiBold"
+                           Margin="0,0,0,8"/>
+                <CheckBox Content="Use the full machine"
+                          IsChecked="{Binding UseFullMachine, Mode=TwoWay}"
+                          Margin="0,2"/>
+                <CheckBox Content="Save intermediate data for future reuse"
+                          IsChecked="{Binding SaveIntermediateData, Mode=TwoWay}"
+                          Margin="0,2"/>
+                <CheckBox Content="Stop immediately if any frame is mismatched"
+                          IsChecked="{Binding StopOnMismatch, Mode=TwoWay}"
+                          Margin="0,2"/>
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                    <TextBlock Text="Keep best %:"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                    <TextBox Width="70"
+                             Text="{Binding KeepBestPercentText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Cancel" Width="90" Margin="0,0,8,0" IsCancel="True"/>
+            <Button Content="Start Compute" Width="120" IsDefault="True" Click="StartCompute_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>
