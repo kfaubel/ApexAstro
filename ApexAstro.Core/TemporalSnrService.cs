@@ -28,6 +28,7 @@ namespace ApexAstro.Core
         public bool ComputePerFrameSnr { get; set; } = true;
         public double KeepBestPercent { get; set; } = 80.0;
         public int? MaxDegreeOfParallelism { get; set; }
+        public int SamplePixelCount { get; set; } = 10_000;
         public int MinSamples { get; set; } = 4;
         public double MadSigmaThreshold { get; set; } = 3.5;
         public string[] Extensions { get; set; } = new[] { ".fits", ".fit", ".fts" };
@@ -110,6 +111,8 @@ namespace ApexAstro.Core
                 throw new DirectoryNotFoundException($"Directory not found: {directoryPath}");
             if (options.MinSamples < 2)
                 throw new ArgumentOutOfRangeException(nameof(options.MinSamples), "MinSamples must be >= 2");
+            if (options.SamplePixelCount < 0)
+                throw new ArgumentOutOfRangeException(nameof(options.SamplePixelCount), "SamplePixelCount must be >= 0");
             if (options.MadSigmaThreshold <= 0)
                 throw new ArgumentOutOfRangeException(nameof(options.MadSigmaThreshold), "MadSigmaThreshold must be > 0");
 
@@ -234,30 +237,40 @@ namespace ApexAstro.Core
             FrameData referenceFrame = SelectReferenceFrame(frames);
             float[] referencePixels = referenceFrame.Pixels;
 
-            var workingSet = new List<float[]>(frames.Count);
-            int alignmentProcessed = 0;
             int totalAlignmentFrames = Math.Max(1, frames.Count);
-            foreach (FrameData frame in frames)
+            int alignmentProcessed = 0;
+            var alignedFrames = new float[frames.Count][];
+
+            int alignmentThreadCount = ResolveAlignmentThreadCount(threadCount, frames.Count);
+            var alignmentOptions = new ParallelOptions
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                MaxDegreeOfParallelism = alignmentThreadCount,
+                CancellationToken = cancellationToken
+            };
+
+            Parallel.For(0, frames.Count, alignmentOptions, frameIndex =>
+            {
+                FrameData frame = frames[frameIndex];
                 if (!options.RegisterFrames || frame.Path.Equals(referenceFrame.Path, StringComparison.OrdinalIgnoreCase))
                 {
-                    workingSet.Add(frame.Pixels);
-                    alignmentProcessed++;
-                    ReportAlignmentProgress(progress, filterName, stageIndex, stageCount, filterIndex, filterCount, alignmentProcessed, totalAlignmentFrames);
-                    continue;
+                    alignedFrames[frameIndex] = frame.Pixels;
+                }
+                else
+                {
+                    alignedFrames[frameIndex] = TryRegisterWithEcc(referencePixels, frame.Pixels, baseline.Width, baseline.Height);
                 }
 
-                float[] aligned = TryRegisterWithEcc(referencePixels, frame.Pixels, baseline.Width, baseline.Height);
-                workingSet.Add(aligned);
-                alignmentProcessed++;
-                ReportAlignmentProgress(progress, filterName, stageIndex, stageCount, filterIndex, filterCount, alignmentProcessed, totalAlignmentFrames);
-            }
+                int processed = Interlocked.Increment(ref alignmentProcessed);
+                ReportAlignmentProgress(progress, filterName, stageIndex, stageCount, filterIndex, filterCount, processed, totalAlignmentFrames);
+            });
+
+            var workingSet = alignedFrames.ToList();
 
             (float[] snrMap, int[] rejectedMap) = ComputeSnrMaps(
                 workingSet,
                 baseline.Width,
                 baseline.Height,
+                options.SamplePixelCount,
                 options.MinSamples,
                 options.MadSigmaThreshold,
                 threadCount,
@@ -410,6 +423,7 @@ namespace ApexAstro.Core
             List<float[]> frames,
             int width,
             int height,
+            int samplePixelCount,
             int minSamples,
             double madSigmaThreshold,
             int threadCount,
@@ -426,8 +440,20 @@ namespace ApexAstro.Core
             var snrMap = new float[pixelCount];
             var rejectedMap = new int[pixelCount];
             const double epsilon = 1e-8;
+            bool useSampling = samplePixelCount > 0 && samplePixelCount < pixelCount;
+            int[] sampledIndices = useSampling
+                ? BuildUniformSampleIndices(pixelCount, samplePixelCount)
+                : Array.Empty<int>();
+            int workPixelCount = useSampling ? sampledIndices.Length : pixelCount;
+
+            if (useSampling)
+            {
+                Array.Fill(snrMap, float.NaN);
+                Array.Fill(rejectedMap, -1);
+            }
+
             int completedPixels = 0;
-            int nextReportAt = Math.Max(1000, pixelCount / 100);
+            int nextReportAt = Math.Max(100, workPixelCount / 100);
 
             var parallelOptions = new ParallelOptions
             {
@@ -435,10 +461,11 @@ namespace ApexAstro.Core
                 CancellationToken = cancellationToken
             };
 
-            Parallel.For(0, pixelCount, parallelOptions,
+            Parallel.For(0, workPixelCount, parallelOptions,
                 () => new ThreadLocalBuffers(frameCount),
-                (pixelIndex, _, buffers) =>
+                (workIndex, _, buffers) =>
                 {
+                    int pixelIndex = useSampling ? sampledIndices[workIndex] : workIndex;
                     int count = 0;
                     for (int frameIndex = 0; frameIndex < frameCount; frameIndex++)
                     {
@@ -502,10 +529,10 @@ namespace ApexAstro.Core
                     rejectedMap[pixelIndex] = rejected;
 
                     int processed = Interlocked.Increment(ref completedPixels);
-                    if (progress != null && (processed >= nextReportAt || processed == pixelCount))
+                    if (progress != null && (processed >= nextReportAt || processed == workPixelCount))
                     {
-                        nextReportAt = processed + Math.Max(1000, pixelCount / 100);
-                        double pixelRatio = Math.Clamp(processed / (double)pixelCount, 0.0, 1.0);
+                        nextReportAt = processed + Math.Max(100, workPixelCount / 100);
+                        double pixelRatio = Math.Clamp(processed / (double)workPixelCount, 0.0, 1.0);
                         double filterProgress = 0.20 + (0.75 * pixelRatio);
                         progress.Report(new TemporalSnrProgressInfo
                         {
@@ -515,7 +542,9 @@ namespace ApexAstro.Core
                             PercentComplete = filterProgress,
                             OverallPercentComplete = ComposeOverallProgress(filterIndex, filterCount, filterProgress),
                             CurrentFilterPercentComplete = filterProgress,
-                            Message = $"Computing temporal SNR for {filterName}",
+                            Message = useSampling
+                                ? $"Computing sampled temporal SNR for {filterName} ({workPixelCount:N0} points)"
+                                : $"Computing temporal SNR for {filterName}",
                             FilterName = filterName
                         });
                     }
@@ -524,6 +553,27 @@ namespace ApexAstro.Core
                 _ => { });
 
             return (snrMap, rejectedMap);
+        }
+
+        private static int[] BuildUniformSampleIndices(int pixelCount, int sampleCount)
+        {
+            int clampedCount = Math.Clamp(sampleCount, 1, pixelCount);
+            var indices = new int[clampedCount];
+            double step = pixelCount / (double)clampedCount;
+            int previous = -1;
+
+            for (int i = 0; i < clampedCount; i++)
+            {
+                int index = (int)Math.Floor((i + 0.5) * step);
+                index = Math.Clamp(index, 0, pixelCount - 1);
+                if (index <= previous)
+                    index = Math.Min(pixelCount - 1, previous + 1);
+
+                indices[i] = index;
+                previous = index;
+            }
+
+            return indices;
         }
 
         private static void ReportAlignmentProgress(
@@ -605,6 +655,16 @@ namespace ApexAstro.Core
                 TemporalSnrExecutionProfile.Max => cpu,
                 _ => Math.Max(1, cpu - 2)
             };
+        }
+
+        private static int ResolveAlignmentThreadCount(int computeThreadCount, int frameCount)
+        {
+            int cpu = Environment.ProcessorCount;
+            int cap = cpu >= 16 ? 4 : cpu >= 8 ? 2 : 1;
+            if (frameCount <= 4)
+                cap = Math.Min(cap, 2);
+
+            return Math.Max(1, Math.Min(computeThreadCount, cap));
         }
 
         private static FrameData SelectReferenceFrame(List<FrameData> frames)

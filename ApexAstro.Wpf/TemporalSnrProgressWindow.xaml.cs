@@ -18,7 +18,8 @@ namespace ApexAstro.Wpf
         private bool _cancelRequested;
         private double _totalProgressValue;
         private double _filterProgressValue;
-        private string _statusText = "Preparing temporal SNR computation...";
+        private double? _smoothedRemainingSeconds;
+        private string _statusText = "Preparing SNR computation...";
         private string _resultText = string.Empty;
         private string _percentText = "0% overall";
         private string _filterPercentText = "0% filter";
@@ -35,7 +36,7 @@ namespace ApexAstro.Wpf
             {
                 new("Validate and group frames"),
                 new("Align frames by filter"),
-                new("Compute pixel-wise temporal SNR"),
+                new("Compute pixel-wise SNR"),
                 new("Save cache and validation data")
             };
 
@@ -269,16 +270,21 @@ namespace ApexAstro.Wpf
                 return;
 
             double progressRatio = Math.Clamp(_totalProgressValue / 100.0, 0.0, 1.0);
-            if (progressRatio <= 0.001)
+            TimeSpan elapsed = _stopwatch.Elapsed;
+
+            double projectedRemainingSeconds = _estimatedTotal.TotalSeconds;
+            if (progressRatio > 0.001)
             {
-                EtaText = $"Time remaining: {FormatElapsed(_estimatedTotal)}";
-                return;
+                double projectedTotalSeconds = elapsed.TotalSeconds / progressRatio;
+                projectedRemainingSeconds = Math.Max(0.0, projectedTotalSeconds - elapsed.TotalSeconds);
             }
 
-            TimeSpan elapsed = _stopwatch.Elapsed;
-            double expectedTotalSeconds = Math.Max(_estimatedTotal.TotalSeconds, elapsed.TotalSeconds / progressRatio);
-            double remainingSeconds = Math.Max(0.0, expectedTotalSeconds - elapsed.TotalSeconds);
-            var remaining = TimeSpan.FromSeconds(remainingSeconds);
+            double blendedSeconds = _smoothedRemainingSeconds.HasValue
+                ? (_smoothedRemainingSeconds.Value * 0.85) + (projectedRemainingSeconds * 0.15)
+                : projectedRemainingSeconds;
+
+            _smoothedRemainingSeconds = Math.Max(0.0, blendedSeconds);
+            var remaining = TimeSpan.FromSeconds(_smoothedRemainingSeconds.Value);
             EtaText = $"Time remaining: {FormatElapsed(remaining)}";
         }
 
@@ -338,35 +344,41 @@ namespace ApexAstro.Wpf
     {
         public string FilterName { get; init; } = string.Empty;
         public double MedianTemporalSnr { get; init; }
-        public double MeanTemporalSnr { get; init; }
-        public double StandardDeviationTemporalSnr { get; init; }
         public int FrameCount { get; init; }
+        public double? IntegrationMinutes { get; init; }
+        public double? AdditionalMinutesTo30 { get; init; }
+        public double? AdditionalMinutesTo60 { get; init; }
+        public double? AdditionalMinutesTo90 { get; init; }
 
-        public double CoefficientOfVariation => MeanTemporalSnr > 1e-9
-            ? StandardDeviationTemporalSnr / MeanTemporalSnr
-            : 0.0;
+        public string IntegrationMinutesDisplay => FormatMinutes(IntegrationMinutes);
+        public string AdditionalTo30Display => FormatAdditionalMinutes(AdditionalMinutesTo30);
+        public string AdditionalTo60Display => FormatAdditionalMinutes(AdditionalMinutesTo60);
+        public string AdditionalTo90Display => FormatAdditionalMinutes(AdditionalMinutesTo90);
 
-        public string CvDisplay => $"{CoefficientOfVariation:P1}";
-
-        public string CvGrade => CoefficientOfVariation switch
+        private static string FormatMinutes(double? minutes)
         {
-            < 0.15 => "Green",
-            < 0.30 => "Yellow",
-            _ => "Red"
-        };
+            if (!minutes.HasValue || !double.IsFinite(minutes.Value))
+                return "--";
 
-        public System.Windows.Media.Brush CvGradeBrush => CvGrade switch
-        {
-            "Green" => System.Windows.Media.Brushes.ForestGreen,
-            "Yellow" => System.Windows.Media.Brushes.Goldenrod,
-            _ => System.Windows.Media.Brushes.IndianRed
-        };
+            return FormatHoursMinutes(TimeSpan.FromMinutes(Math.Max(0.0, minutes.Value)));
+        }
 
-        public string TargetDataGuidance => CvGrade switch
+        private static string FormatAdditionalMinutes(double? minutes)
         {
-            "Green" => "On target",
-            "Yellow" => "Add ~25-50%",
-            _ => "Add ~75-100%"
-        };
+            if (!minutes.HasValue || !double.IsFinite(minutes.Value))
+                return "--";
+
+            if (minutes.Value <= 0.0)
+                return "0h";
+
+            int hours = (int)Math.Ceiling(minutes.Value / 60.0);
+            return $"{hours}h";
+        }
+
+        private static string FormatHoursMinutes(TimeSpan span)
+        {
+            int hours = (int)span.TotalHours;
+            return $"{hours:00}:{span.Minutes:00}";
+        }
     }
 }

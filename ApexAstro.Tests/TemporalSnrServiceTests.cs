@@ -88,6 +88,40 @@ namespace ApexAstro.Tests
             Assert.Throws<InvalidOperationException>(() => service.ComputeDirectory(_tempDirectory, options));
         }
 
+        [Fact]
+        public void ComputeDirectory_WithSamplePixelCount_ComputesOnlySampledPoints()
+        {
+            int width = 20;
+            int height = 20;
+            int pixelCount = width * height;
+
+            short[] frame1 = Enumerable.Repeat((short)100, pixelCount).ToArray();
+            short[] frame2 = Enumerable.Repeat((short)110, pixelCount).ToArray();
+            short[] frame3 = Enumerable.Repeat((short)120, pixelCount).ToArray();
+
+            WriteFits16(Path.Combine(_tempDirectory, "2026-01-01_00-00-01_L_0001.fits"), width, height, "L", frame1);
+            WriteFits16(Path.Combine(_tempDirectory, "2026-01-01_00-00-02_L_0002.fits"), width, height, "L", frame2);
+            WriteFits16(Path.Combine(_tempDirectory, "2026-01-01_00-00-03_L_0003.fits"), width, height, "L", frame3);
+
+            var service = new TemporalSnrService();
+            var options = new TemporalSnrOptions
+            {
+                RegisterFrames = false,
+                MinSamples = 2,
+                SamplePixelCount = 50,
+                Profile = TemporalSnrExecutionProfile.Portable
+            };
+
+            TemporalSnrComputationResult result = service.ComputeDirectory(_tempDirectory, options);
+            TemporalSnrFilterResult lResult = result.FilterResults["L"];
+
+            int computedPointCount = lResult.TemporalSnrMap.Count(float.IsFinite);
+            int unsampledPointCount = lResult.RejectedSampleCountMap.Count(value => value < 0);
+
+            Assert.Equal(50, computedPointCount);
+            Assert.Equal(pixelCount - 50, unsampledPointCount);
+        }
+
         private static void WriteFits16(string filePath, int width, int height, string filter, short[] pixels)
         {
             if (pixels.Length != width * height)

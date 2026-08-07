@@ -1,9 +1,13 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows;
+using ApexAstro.Core;
 using ApexAstro.Wpf.Services;
 
 namespace ApexAstro.Wpf
@@ -12,11 +16,10 @@ namespace ApexAstro.Wpf
     {
         private readonly TemporalSnrPreflightPlan _plan;
         private bool _useFullMachine;
-        private string _keepBestPercentText = "80";
         private bool _saveIntermediateData;
         private bool _stopOnMismatch;
 
-        public TemporalSnrPreflightDialog(TemporalSnrPreflightPlan plan, TemporalSnrCacheManifest? currentCacheManifest = null)
+        public TemporalSnrPreflightDialog(TemporalSnrPreflightPlan plan, TemporalSnrCacheManifest? currentCacheManifest = null, string? folderPath = null)
         {
             _plan = plan;
             InitializeComponent();
@@ -25,22 +28,28 @@ namespace ApexAstro.Wpf
             EstimateText = $"Estimated {FormatSpan(plan.EstimatedMinimumDuration)} to {FormatSpan(plan.EstimatedMaximumDuration)} on this machine.\nTarget duration: about {FormatSpan(plan.EstimatedDuration)}.";
             HardwareText = $"{plan.Hardware.CpuName} • {plan.Hardware.PhysicalCores} cores / {plan.Hardware.LogicalProcessors} threads • {FormatRam(plan.Hardware.TotalRamBytes)} RAM";
 
-            CurrentResults = new ObservableCollection<TemporalSnrPreflightResultRow>();
+            CurrentResults = new ObservableCollection<TemporalSnrFilterSummary>();
 
             if (currentCacheManifest != null)
             {
                 HasCurrentResults = true;
                 CurrentResultsSummaryText = $"Current SNR results are up to date (computed {currentCacheManifest.ComputedUtc.ToLocalTime():g}).";
+                string sourceFolder = !string.IsNullOrWhiteSpace(folderPath)
+                    ? folderPath
+                    : currentCacheManifest.FolderPath;
 
                 foreach (var filter in currentCacheManifest.Filters.OrderBy(f => f.FilterName, StringComparer.OrdinalIgnoreCase))
                 {
-                    CurrentResults.Add(new TemporalSnrPreflightResultRow
+                    double? integrationMinutes = ComputeIntegrationMinutes(filter, sourceFolder);
+                    CurrentResults.Add(new TemporalSnrFilterSummary
                     {
                         FilterName = filter.FilterName,
                         MedianTemporalSnr = filter.MedianTemporalSnr,
-                        MeanTemporalSnr = filter.MeanTemporalSnr,
-                        StandardDeviationTemporalSnr = filter.StandardDeviationTemporalSnr,
-                        FrameCount = filter.FrameCount
+                        FrameCount = filter.FrameCount,
+                        IntegrationMinutes = integrationMinutes,
+                        AdditionalMinutesTo30 = ComputeAdditionalMinutesForTargetSnr(filter.MedianTemporalSnr, integrationMinutes, 30.0),
+                        AdditionalMinutesTo60 = ComputeAdditionalMinutesForTargetSnr(filter.MedianTemporalSnr, integrationMinutes, 60.0),
+                        AdditionalMinutesTo90 = ComputeAdditionalMinutesForTargetSnr(filter.MedianTemporalSnr, integrationMinutes, 90.0)
                     });
                 }
             }
@@ -50,10 +59,9 @@ namespace ApexAstro.Wpf
                 CurrentResultsSummaryText = "No current SNR cache found for this folder. A new compute is needed to populate results.";
             }
 
-            ComputeStepsText = "Steps to compute SNR:\n1. Validate and group frames by filter\n2. Align frames per filter\n3. Compute pixel-wise temporal SNR\n4. Save cache and validation data";
+            ComputeStepsText = "Steps to compute SNR:\n1. Validate and group frames by filter\n2. Align frames per filter\n3. Compute SNR from sampled pixels (10,000 default)\n4. Save cache and validation data";
 
             UseFullMachine = plan.UseFullMachineDefault;
-            KeepBestPercentText = "80";
             SaveIntermediateData = plan.SaveIntermediateDataDefault;
             StopOnMismatch = plan.StopOnMismatchDefault;
         }
@@ -66,7 +74,7 @@ namespace ApexAstro.Wpf
         public string ComputeStepsText { get; }
         public bool HasCurrentResults { get; }
         public bool ShowComputeSteps => !HasCurrentResults;
-        public ObservableCollection<TemporalSnrPreflightResultRow> CurrentResults { get; }
+        public ObservableCollection<TemporalSnrFilterSummary> CurrentResults { get; }
 
         public bool UseFullMachine
         {
@@ -94,21 +102,6 @@ namespace ApexAstro.Wpf
             }
         }
 
-        public string KeepBestPercentText
-        {
-            get => _keepBestPercentText;
-            set
-            {
-                if (_keepBestPercentText != value)
-                {
-                    _keepBestPercentText = value;
-                    OnPropertyChanged();
-                }
-            }
-        }
-
-        public double KeepBestPercent { get; private set; } = 80.0;
-
         public bool StopOnMismatch
         {
             get => _stopOnMismatch;
@@ -126,17 +119,6 @@ namespace ApexAstro.Wpf
 
         private void StartCompute_Click(object sender, RoutedEventArgs e)
         {
-            if (!double.TryParse(KeepBestPercentText, out double keepBestPercent) || keepBestPercent <= 0 || keepBestPercent > 100)
-            {
-                System.Windows.MessageBox.Show(
-                    "Keep best % must be a number between 0 and 100.",
-                    "Invalid Keep Best %",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
-                return;
-            }
-
-            KeepBestPercent = keepBestPercent;
             DialogResult = true;
             Close();
         }
@@ -158,41 +140,145 @@ namespace ApexAstro.Wpf
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
-    }
 
-    public sealed class TemporalSnrPreflightResultRow
-    {
-        public string FilterName { get; init; } = string.Empty;
-        public double MedianTemporalSnr { get; init; }
-        public double MeanTemporalSnr { get; init; }
-        public double StandardDeviationTemporalSnr { get; init; }
-        public int FrameCount { get; init; }
-
-        public double CoefficientOfVariation => MeanTemporalSnr > 1e-9
-            ? StandardDeviationTemporalSnr / MeanTemporalSnr
-            : 0.0;
-
-        public string CvDisplay => $"{CoefficientOfVariation:P1}";
-
-        public string CvGrade => CoefficientOfVariation switch
+        private static double? ComputeIntegrationMinutes(TemporalSnrCacheFilterEntry filter, string folderPath)
         {
-            < 0.15 => "Green",
-            < 0.30 => "Yellow",
-            _ => "Red"
-        };
+            if (filter.SourceFiles == null || filter.SourceFiles.Count == 0)
+                return null;
 
-        public System.Windows.Media.Brush CvGradeBrush => CvGrade switch
-        {
-            "Green" => System.Windows.Media.Brushes.ForestGreen,
-            "Yellow" => System.Windows.Media.Brushes.Goldenrod,
-            _ => System.Windows.Media.Brushes.IndianRed
-        };
+            double totalSeconds = 0.0;
+            int exposureCount = 0;
 
-        public string TargetDataGuidance => CvGrade switch
+            foreach (var source in filter.SourceFiles)
+            {
+                string filePath = Path.Combine(folderPath, source.FileName);
+                double? exposureSeconds = TryReadExposureSeconds(filePath, source.FileName);
+                if (!exposureSeconds.HasValue || exposureSeconds.Value <= 0)
+                    continue;
+
+                totalSeconds += exposureSeconds.Value;
+                exposureCount++;
+            }
+
+            if (exposureCount == 0)
+                return null;
+
+            return totalSeconds / 60.0;
+        }
+
+        private static double? TryReadExposureSeconds(string filePath, string fallbackFileName)
         {
-            "Green" => "On target",
-            "Yellow" => "Add ~25-50%",
-            _ => "Add ~75-100%"
-        };
+            try
+            {
+                if (File.Exists(filePath))
+                {
+                    var headers = FitsParser.ParseHeaderFromFile(filePath);
+                    if (TryGetExposureFromHeader(headers, out double headerExposureSeconds))
+                        return headerExposureSeconds;
+                }
+            }
+            catch
+            {
+                // Fall back to filename parsing.
+            }
+
+            return TryParseExposureFromFilename(fallbackFileName);
+        }
+
+        private static bool TryGetExposureFromHeader(Dictionary<string, object> headers, out double exposureSeconds)
+        {
+            exposureSeconds = 0.0;
+
+            if (TryGetHeaderDouble(headers, "EXPTIME", out exposureSeconds))
+                return true;
+
+            if (TryGetHeaderDouble(headers, "EXPOSURE", out exposureSeconds))
+                return true;
+
+            return false;
+        }
+
+        private static bool TryGetHeaderDouble(Dictionary<string, object> headers, string key, out double value)
+        {
+            value = 0.0;
+            if (!headers.TryGetValue(key, out var raw) || raw == null)
+                return false;
+
+            if (raw is double d)
+            {
+                value = d;
+                return value > 0;
+            }
+
+            if (raw is float f)
+            {
+                value = f;
+                return value > 0;
+            }
+
+            if (raw is int i)
+            {
+                value = i;
+                return value > 0;
+            }
+
+            if (raw is long l)
+            {
+                value = l;
+                return value > 0;
+            }
+
+            string text = raw.ToString() ?? string.Empty;
+            if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed))
+            {
+                value = parsed;
+                return value > 0;
+            }
+
+            return false;
+        }
+
+        private static double? TryParseExposureFromFilename(string fileName)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+                return null;
+
+            string nameWithoutExtension = Path.GetFileNameWithoutExtension(fileName);
+            if (string.IsNullOrWhiteSpace(nameWithoutExtension))
+                return null;
+
+            string[] tokens = nameWithoutExtension.Split('_', StringSplitOptions.RemoveEmptyEntries);
+            foreach (string token in tokens)
+            {
+                if (!token.EndsWith("s", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                string numericPart = token[..^1];
+                if (double.TryParse(numericPart, NumberStyles.Float, CultureInfo.InvariantCulture, out double seconds)
+                    && seconds > 0)
+                {
+                    return seconds;
+                }
+            }
+
+            return null;
+        }
+
+        private static double? ComputeAdditionalMinutesForTargetSnr(double currentMedianSnr, double? integrationMinutes, double targetSnr)
+        {
+            if (!integrationMinutes.HasValue || !double.IsFinite(integrationMinutes.Value) || integrationMinutes.Value <= 0)
+                return null;
+
+            if (!double.IsFinite(currentMedianSnr) || currentMedianSnr <= 0)
+                return null;
+
+            if (currentMedianSnr >= targetSnr)
+                return 0.0;
+
+            double scale = targetSnr / currentMedianSnr;
+            double requiredTotalMinutes = integrationMinutes.Value * scale * scale;
+            double additionalMinutes = requiredTotalMinutes - integrationMinutes.Value;
+            return Math.Max(0.0, additionalMinutes);
+        }
     }
 }

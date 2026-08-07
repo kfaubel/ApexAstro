@@ -1,5 +1,4 @@
 using System;
-using System.Windows;
 
 namespace ApexAstro.Wpf.Services
 {
@@ -9,14 +8,13 @@ namespace ApexAstro.Wpf.Services
     /// This separates UI concerns from business logic - the ViewModel doesn't need to know
     /// about specific dialog implementations.
     /// 
-    /// Uses Windows.Forms.OpenFileDialog with folder selection mode, which better
-    /// respects the system theme compared to FolderBrowserDialog.
+    /// Uses OpenFolderDialog so the user sees folders only (no file list).
     /// </summary>
     public class FolderDialogService : IFolderDialogService
     {
         /// <summary>
         /// Shows a folder browser dialog and returns the selected folder path.
-        /// Uses OpenFileDialog in folder selection mode, which respects system theme better.
+        /// Uses OpenFolderDialog so only folders are shown.
         /// </summary>
         /// <param name="initialDirectory">The directory to start browsing from</param>
         /// <returns>The selected folder path, or null if user cancelled</returns>
@@ -24,39 +22,17 @@ namespace ApexAstro.Wpf.Services
         {
             try
             {
-                // Use OpenFileDialog with ValidateNames=false to allow folder selection
-                // This respects the system theme better than FolderBrowserDialog
-                using (var dialog = new System.Windows.Forms.OpenFileDialog())
+                var dialog = new Microsoft.Win32.OpenFolderDialog
                 {
-                    dialog.Title = "Select Folder";
-                    dialog.InitialDirectory = initialDirectory;
-                    
-                    // These settings make it act like a folder picker
-                    dialog.CheckFileExists = false;
-                    dialog.CheckPathExists = true;
-                    dialog.ValidateNames = false;
-                    dialog.FileName = "Select Folder";
-                    
-                    // Get the window handle for the current WPF window
-                    var hwnd = new System.Windows.Interop.WindowInteropHelper(System.Windows.Application.Current.MainWindow).Handle;
-                    
-                    // Show the dialog
-                    var result = dialog.ShowDialog();
-                    
-                    // Check if user clicked OK
-                    if (result == System.Windows.Forms.DialogResult.OK)
-                    {
-                        // Get the folder path
-                        string? pathDir = System.IO.Path.GetDirectoryName(dialog.FileName);
-                        if (!string.IsNullOrEmpty(pathDir) && System.IO.Directory.Exists(pathDir))
-                        {
-                            return pathDir;
-                        }
-                    }
-                    
-                    // User cancelled
-                    return null;
-                }
+                    Title = "Select Folder",
+                    InitialDirectory = initialDirectory,
+                    Multiselect = false
+                };
+
+                if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.FolderName) && System.IO.Directory.Exists(dialog.FolderName))
+                    return dialog.FolderName;
+
+                return null;
             }
             catch
             {

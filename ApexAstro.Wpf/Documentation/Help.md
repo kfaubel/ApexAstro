@@ -78,7 +78,49 @@ The Auto Select Dialog allows you to automatically select images based on specif
 Clicking the graph icon in the toolbar will display a plot of the metadata values for all of the images in the current folder. This allows for quick visual analysis of trends and outliers in the dataset.
 
 ## SNR Display
-The SNR (Signal-to-Noise Ratio) can be calculated for the images in this folder displayed by filter type.  This helps decide how good the data is and how much more data may be required for a goog, better, great final image.  
+The SNR (Signal-to-Noise Ratio) tools estimate data quality in two ways:
+- **Overall SNR by filter** (L, R, G, B, Ha, etc.)
+- **Per-image (per-frame) SNR** for each file
+
+### Overall SNR (per filter)
+When you run Compute Temporal SNR, ApexAstro reports these values for each filter:
+
+- By default, ApexAstro computes the overall SNR estimate from a uniform sample of **10,000 pixels** per filter for faster results.
+- If a filter has fewer than 10,000 pixels, all pixels are used.
+
+- **Median**: the middle SNR value of all valid sampled pixels in that filter's SNR map
+- **Mean**: the average SNR value of all valid sampled pixels
+- **StdDev (SD)**: how spread out the SNR values are
+- **CV (Coefficient of Variation)**: SD / Mean
+
+How to interpret them:
+- **Higher Median/Mean** generally means cleaner data (more signal relative to noise)
+- **Lower SD** means the quality is more consistent across the frame
+- **Lower CV** means more uniform/efficient integration quality
+
+CV guidance used by ApexAstro:
+- **Green (< 0.15)**: generally strong/consistent data
+- **Yellow (0.15 to < 0.30)**: usable but more data can help
+- **Red (>= 0.30)**: noisy or inconsistent; additional data is usually recommended
+
+### Per-image (per-frame) SNR
+If enabled in **Options -> Per-frame SNR**, each frame gets an SNR score shown in the file list.
+
+- Scores are shown with 2 decimals.
+- Color coding uses your configured **Green threshold** and **Yellow threshold** in Options.
+- ApexAstro uses:
+	- **Green (great)**: SNR >= Green threshold
+	- **Yellow (good)**: SNR >= Yellow threshold and < Green threshold
+	- **Red (poor)**: SNR < Yellow threshold
+
+Example with Green threshold = 2.00 and Yellow threshold = 1.60:
+- **Great (Green)**: 2.00 and above
+- **Good (Yellow)**: 1.60 to 1.99
+- **Poor (Red)**: below 1.60
+
+Notes:
+- Per-frame SNR is best used to compare frames within the same session/filter/capture setup.
+- Absolute "good" or "great" values depend on sky conditions, gain, exposure, optical setup, and target.
 
 ## Histogram Panel
 A histogram panel can be shown below the image viewer via the Options menu. The histogram can be displayed in linear or logarithmic scale and automatically updates when you select different images. The histogram panel can be hidden to maximize the image viewing area.

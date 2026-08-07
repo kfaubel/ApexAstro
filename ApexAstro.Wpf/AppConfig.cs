@@ -296,9 +296,15 @@ namespace ApexAstro.Wpf
         public bool ShowPerFrameSnrColumn { get; set; } = false;
 
         /// <summary>
-        /// Keep-best threshold (percent) used to classify per-frame SNR values.
+        /// Threshold value used to color-code per-frame SNR values.
         /// </summary>
-        public double PerFrameSnrKeepBestPercent { get; set; } = 80.0;
+        public double PerFrameSnrColorThreshold { get; set; } = 2.0;
+
+        /// <summary>
+        /// Yellow threshold value used to color-code per-frame SNR values.
+        /// Values at or above this threshold are yellow unless they meet the green threshold.
+        /// </summary>
+        public double PerFrameSnrYellowThreshold { get; set; } = 1.6;
 
         /// <summary>
         /// Whether Auto Select should additionally mark the bottom x% by per-frame SNR.

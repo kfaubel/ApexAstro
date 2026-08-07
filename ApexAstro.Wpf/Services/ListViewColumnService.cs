@@ -54,9 +54,116 @@ namespace ApexAstro.Wpf.Services
             return keyword switch
             {
                 "EXPOSURE" => "EXP",
+                "EXPTIME" => "EXP",
+                "CCD_TIME" => "TEMP",
+                "CCD_TEMP" => "TEMP",
                 "CCD-TEMP" => "TEMP",
                 _ => keyword
             };
+        }
+
+        private static string NormalizeColumnKey(string columnName)
+        {
+            return columnName
+                .Trim()
+                .Replace("-", "_", StringComparison.Ordinal)
+                .ToUpperInvariant();
+        }
+
+        private static double GetKeywordMinimumWidth(string columnName)
+        {
+            string normalized = NormalizeColumnKey(columnName);
+
+            return normalized switch
+            {
+                // Ensure these short metric columns can display values like "12.34".
+                "RMS" or "HFR" or "ECC" => 62,
+
+                // Ensure exposure/temperature values are never collapsed to "1....".
+                "EXPOSURE" or "EXPTIME" or "CCD_TIME" or "CCD_TEMP" => 74,
+
+                _ => 0
+            };
+        }
+
+        private static System.Windows.Media.Brush GetCellSeparatorBrush()
+        {
+            return System.Windows.Application.Current.TryFindResource("ThemeBorderBrush") as System.Windows.Media.Brush
+                ?? System.Windows.Media.Brushes.Gray;
+        }
+
+        private static DataTemplate CreateBorderedElementTemplate(FrameworkElementFactory innerFactory, System.Windows.Thickness? padding = null)
+        {
+            var borderFactory = new FrameworkElementFactory(typeof(System.Windows.Controls.Border));
+            borderFactory.SetValue(System.Windows.Controls.Border.BorderBrushProperty, GetCellSeparatorBrush());
+            borderFactory.SetValue(System.Windows.Controls.Border.BorderThicknessProperty, new System.Windows.Thickness(0, 0, 1, 0));
+            borderFactory.SetValue(System.Windows.Controls.Border.PaddingProperty, padding ?? new System.Windows.Thickness(4, 1, 4, 1));
+            borderFactory.SetValue(System.Windows.Controls.Border.SnapsToDevicePixelsProperty, true);
+            borderFactory.AppendChild(innerFactory);
+            return new DataTemplate { VisualTree = borderFactory };
+        }
+
+        private static DataTemplate CreateTextCellTemplate(
+            System.Windows.Data.BindingBase textBinding,
+            System.Windows.Data.BindingBase? foregroundBinding = null,
+            System.Windows.TextAlignment textAlignment = System.Windows.TextAlignment.Left,
+            bool centerHorizontally = false,
+            string? toolTip = null)
+        {
+            var textFactory = new FrameworkElementFactory(typeof(System.Windows.Controls.TextBlock));
+            textFactory.SetBinding(System.Windows.Controls.TextBlock.TextProperty, textBinding);
+            if (foregroundBinding != null)
+            {
+                textFactory.SetBinding(System.Windows.Controls.TextBlock.ForegroundProperty, foregroundBinding);
+            }
+
+            textFactory.SetValue(System.Windows.FrameworkElement.MarginProperty, new System.Windows.Thickness(0));
+            textFactory.SetValue(System.Windows.Controls.TextBlock.TextTrimmingProperty, System.Windows.TextTrimming.CharacterEllipsis);
+            textFactory.SetValue(System.Windows.Controls.TextBlock.VerticalAlignmentProperty, System.Windows.VerticalAlignment.Center);
+            textFactory.SetValue(System.Windows.Controls.TextBlock.TextAlignmentProperty, textAlignment);
+            textFactory.SetValue(System.Windows.FrameworkElement.HorizontalAlignmentProperty, centerHorizontally ? System.Windows.HorizontalAlignment.Center : System.Windows.HorizontalAlignment.Stretch);
+
+            if (!string.IsNullOrWhiteSpace(toolTip))
+            {
+                textFactory.SetValue(System.Windows.FrameworkElement.ToolTipProperty, toolTip);
+            }
+
+            return CreateBorderedElementTemplate(textFactory);
+        }
+
+        private static DataTemplate CreateCheckBoxCellTemplate(System.Windows.Data.BindingBase isCheckedBinding)
+        {
+            var checkFactory = new FrameworkElementFactory(typeof(System.Windows.Controls.CheckBox));
+            checkFactory.SetBinding(System.Windows.Controls.CheckBox.IsCheckedProperty, isCheckedBinding);
+            checkFactory.SetValue(System.Windows.FrameworkElement.HorizontalAlignmentProperty, System.Windows.HorizontalAlignment.Center);
+            checkFactory.SetValue(System.Windows.FrameworkElement.VerticalAlignmentProperty, System.Windows.VerticalAlignment.Center);
+
+            return CreateBorderedElementTemplate(checkFactory, new System.Windows.Thickness(2, 0, 2, 0));
+        }
+
+        private static DataTemplate CreateButtonCellTemplate(string content, string toolTip, System.Windows.Data.BindingBase commandBinding, System.Windows.Data.BindingBase parameterBinding)
+        {
+            var buttonFactory = new FrameworkElementFactory(typeof(System.Windows.Controls.Button));
+            buttonFactory.SetValue(System.Windows.Controls.Button.ContentProperty, content);
+            buttonFactory.SetValue(System.Windows.Controls.Button.WidthProperty, 25.0);
+            buttonFactory.SetValue(System.Windows.Controls.Button.HeightProperty, 25.0);
+            buttonFactory.SetValue(System.Windows.Controls.Button.ToolTipProperty, toolTip);
+            buttonFactory.SetValue(System.Windows.FrameworkElement.HorizontalAlignmentProperty, System.Windows.HorizontalAlignment.Center);
+            buttonFactory.SetValue(System.Windows.FrameworkElement.VerticalAlignmentProperty, System.Windows.VerticalAlignment.Center);
+            buttonFactory.SetValue(System.Windows.Controls.Button.FontSizeProperty, 14.0);
+            buttonFactory.SetValue(System.Windows.Controls.Button.FontWeightProperty, System.Windows.FontWeights.Bold);
+            buttonFactory.SetBinding(System.Windows.Controls.Button.CommandProperty, commandBinding);
+            buttonFactory.SetBinding(System.Windows.Controls.Button.CommandParameterProperty, parameterBinding);
+
+            var buttonForeground = System.Windows.Application.Current.TryFindResource("ThemeAccentBlue") as System.Windows.Media.Brush
+                ?? System.Windows.Media.Brushes.DarkBlue;
+            buttonFactory.SetValue(System.Windows.Controls.Button.ForegroundProperty, buttonForeground);
+            buttonFactory.SetValue(System.Windows.Controls.Button.BackgroundProperty, System.Windows.Media.Brushes.Transparent);
+            buttonFactory.SetValue(System.Windows.Controls.Button.BorderBrushProperty, System.Windows.Media.Brushes.Transparent);
+            buttonFactory.SetValue(System.Windows.Controls.Button.BorderThicknessProperty, new System.Windows.Thickness(0));
+            buttonFactory.SetValue(System.Windows.Controls.Button.PaddingProperty, new System.Windows.Thickness(2));
+
+            return CreateBorderedElementTemplate(buttonFactory, new System.Windows.Thickness(2, 0, 2, 0));
         }
         
         /// <summary>
@@ -112,11 +219,6 @@ namespace ApexAstro.Wpf.Services
 
 
             // Checkbox column (IsSelected)
-            var checkFactory = new FrameworkElementFactory(typeof(System.Windows.Controls.CheckBox));
-            checkFactory.SetBinding(System.Windows.Controls.CheckBox.IsCheckedProperty, new System.Windows.Data.Binding("IsSelected") { Mode = System.Windows.Data.BindingMode.TwoWay });
-            checkFactory.SetValue(System.Windows.Controls.CheckBox.HorizontalAlignmentProperty, System.Windows.HorizontalAlignment.Center);
-            var checkTemplate = new DataTemplate { VisualTree = checkFactory };
-            
             // Create a sortable header for the checkbox column
             var checkboxHeader = CreateSortableHeader("Mark");
             
@@ -124,7 +226,7 @@ namespace ApexAstro.Wpf.Services
             {
                 Header = checkboxHeader,
                 Width = 30,
-                CellTemplate = checkTemplate
+                CellTemplate = CreateCheckBoxCellTemplate(new System.Windows.Data.Binding("IsSelected") { Mode = System.Windows.Data.BindingMode.TwoWay })
             };
             gridView.Columns.Add(checkboxColumn);
 
@@ -135,8 +237,8 @@ namespace ApexAstro.Wpf.Services
                 var fileColumn = new GridViewColumn
                 {
                     Header = CreateSortableHeader("File"),
-                    Width = GetFileColumnWidth(), // Always calculate fresh (35% of window width)
-                    DisplayMemberBinding = new System.Windows.Data.Binding("Name")
+                    Width = GetFileColumnWidth(), // Always calculate fresh (narrow responsive width)
+                    CellTemplate = CreateTextCellTemplate(new System.Windows.Data.Binding("Name"))
                 };
                 gridView.Columns.Add(fileColumn);
             }
@@ -147,7 +249,7 @@ namespace ApexAstro.Wpf.Services
                 {
                     Header = CreateSortableHeader("Date"),
                     Width = CalculateDataDrivenColumnWidth("Date"),
-                    DisplayMemberBinding = new System.Windows.Data.Binding("FilenameDate")
+                    CellTemplate = CreateTextCellTemplate(new System.Windows.Data.Binding("FilenameDate"))
                 };
                 gridView.Columns.Add(dateColumn);
             }
@@ -158,7 +260,7 @@ namespace ApexAstro.Wpf.Services
                 {
                     Header = CreateSortableHeader("Time"),
                     Width = CalculateDataDrivenColumnWidth("Time"),
-                    DisplayMemberBinding = new System.Windows.Data.Binding("FilenameTime")
+                    CellTemplate = CreateTextCellTemplate(new System.Windows.Data.Binding("FilenameTime"))
                 };
                 gridView.Columns.Add(timeColumn);
             }
@@ -172,45 +274,22 @@ namespace ApexAstro.Wpf.Services
                 {
                     Header = frameHeader,
                     Width = CalculateDataDrivenColumnWidth("Frame"),
-                    DisplayMemberBinding = new System.Windows.Data.Binding("FilenameFrame")
+                    CellTemplate = CreateTextCellTemplate(new System.Windows.Data.Binding("FilenameFrame"))
                 };
                 gridView.Columns.Add(frameColumn);
             }
 
             // Metadata button column with info icon (no gray box)
-            var buttonFactory = new FrameworkElementFactory(typeof(System.Windows.Controls.Button));
-            buttonFactory.SetValue(System.Windows.Controls.Button.ContentProperty, "ⓘ");
-            buttonFactory.SetValue(System.Windows.Controls.Button.WidthProperty, 25.0);
-            buttonFactory.SetValue(System.Windows.Controls.Button.HeightProperty, 25.0);
-            buttonFactory.SetValue(System.Windows.Controls.Button.ToolTipProperty, "Show file metadata and headers");
-            buttonFactory.SetValue(System.Windows.Controls.Button.HorizontalAlignmentProperty, System.Windows.HorizontalAlignment.Center);
-            buttonFactory.SetValue(System.Windows.Controls.Button.VerticalAlignmentProperty, System.Windows.VerticalAlignment.Center);
-            buttonFactory.SetValue(System.Windows.Controls.Button.FontSizeProperty, 14.0);
-            buttonFactory.SetValue(System.Windows.Controls.Button.FontWeightProperty, System.Windows.FontWeights.Bold);
-            // Use theme resource for button foreground color
-            var buttonForeground = System.Windows.Application.Current.TryFindResource("ThemeAccentBlue") as System.Windows.Media.Brush
-                ?? System.Windows.Media.Brushes.DarkBlue; // Fallback
-            buttonFactory.SetValue(System.Windows.Controls.Button.ForegroundProperty, buttonForeground);
-            buttonFactory.SetValue(System.Windows.Controls.Button.BackgroundProperty, System.Windows.Media.Brushes.Transparent);
-            buttonFactory.SetValue(System.Windows.Controls.Button.BorderBrushProperty, System.Windows.Media.Brushes.Transparent);
-            buttonFactory.SetValue(System.Windows.Controls.Button.BorderThicknessProperty, new System.Windows.Thickness(0));
-            buttonFactory.SetValue(System.Windows.Controls.Button.PaddingProperty, new System.Windows.Thickness(2));
-            
             // Bind the command to the ViewModel's ShowFileMetadataCommand
             // We need to find the MainWindowViewModel from the DataContext
             var commandBinding = new System.Windows.Data.Binding("DataContext.ShowFileMetadataCommand");
             commandBinding.RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.FindAncestor, typeof(System.Windows.Controls.ListView), 1);
-            buttonFactory.SetBinding(System.Windows.Controls.Button.CommandProperty, commandBinding);
-            
             // Pass the current FileItem as the command parameter
-            buttonFactory.SetBinding(System.Windows.Controls.Button.CommandParameterProperty, new System.Windows.Data.Binding("."));
-            
-            var buttonTemplate = new DataTemplate { VisualTree = buttonFactory };
             var metadataColumn = new GridViewColumn
             {
                 Header = "Info",
                 Width = 35,
-                CellTemplate = buttonTemplate
+                CellTemplate = CreateButtonCellTemplate("ⓘ", "Show file metadata and headers", commandBinding, new System.Windows.Data.Binding("."))
             };
             gridView.Columns.Add(metadataColumn);
 
@@ -234,7 +313,7 @@ namespace ApexAstro.Wpf.Services
                 {
                     Header = CreateSortableHeader("Size"),
                     Width = 80, // Wider to prevent cutoff
-                    CellTemplate = sizeTemplate
+                    CellTemplate = CreateTextCellTemplate(sizeBinding)
                 };
                 gridView.Columns.Add(sizeColumn);
             }
@@ -255,12 +334,11 @@ namespace ApexAstro.Wpf.Services
                 medianFactory.SetBinding(System.Windows.Controls.TextBlock.ForegroundProperty, purpleForegroundBinding);
                 medianFactory.SetValue(System.Windows.Controls.TextBlock.TextTrimmingProperty, System.Windows.TextTrimming.CharacterEllipsis);
                 
-                var medianTemplate = new DataTemplate { VisualTree = medianFactory };
                 var medianColumn = new GridViewColumn
                 {
                     Header = CreateSortableHeader("Median"),
                     Width = 70,
-                    CellTemplate = medianTemplate
+                    CellTemplate = CreateTextCellTemplate(medianBinding)
                 };
                 gridView.Columns.Add(medianColumn);
 
@@ -277,12 +355,11 @@ namespace ApexAstro.Wpf.Services
                 meanFactory.SetBinding(System.Windows.Controls.TextBlock.ForegroundProperty, meanPurpleBinding);
                 meanFactory.SetValue(System.Windows.Controls.TextBlock.TextTrimmingProperty, System.Windows.TextTrimming.CharacterEllipsis);
                 
-                var meanTemplate = new DataTemplate { VisualTree = meanFactory };
                 var meanColumn = new GridViewColumn
                 {
                     Header = CreateSortableHeader("Mean"),
                     Width = 70,
-                    CellTemplate = meanTemplate
+                    CellTemplate = CreateTextCellTemplate(meanBinding)
                 };
                 gridView.Columns.Add(meanColumn);
             }
@@ -295,14 +372,18 @@ namespace ApexAstro.Wpf.Services
                 frameSnrFactory.SetValue(System.Windows.Controls.TextBlock.TextAlignmentProperty, System.Windows.TextAlignment.Center);
                 frameSnrFactory.SetValue(System.Windows.Controls.TextBlock.HorizontalAlignmentProperty, System.Windows.HorizontalAlignment.Center);
                 frameSnrFactory.SetValue(System.Windows.Controls.TextBlock.TextTrimmingProperty, System.Windows.TextTrimming.CharacterEllipsis);
-                frameSnrFactory.SetValue(System.Windows.Controls.TextBlock.ToolTipProperty, "Per-frame temporal SNR quality score");
+                frameSnrFactory.SetValue(System.Windows.Controls.TextBlock.ToolTipProperty, "Per-frame SNR quality score");
 
-                var frameSnrTemplate = new DataTemplate { VisualTree = frameSnrFactory };
                 var frameSnrColumn = new GridViewColumn
                 {
                     Header = CreateSortableHeader("Frame SNR"),
                     Width = 85,
-                    CellTemplate = frameSnrTemplate
+                    CellTemplate = CreateTextCellTemplate(
+                        new System.Windows.Data.Binding("PerFrameSnrDisplay"),
+                        new System.Windows.Data.Binding("PerFrameSnrBrush"),
+                        System.Windows.TextAlignment.Center,
+                        true,
+                        "Per-frame SNR quality score")
                 };
                 gridView.Columns.Add(frameSnrColumn);
             }
@@ -324,8 +405,6 @@ namespace ApexAstro.Wpf.Services
                 foregroundBinding.Path = new System.Windows.PropertyPath("Resources[ThemeAccentGreen]");
                 factory.SetBinding(System.Windows.Controls.TextBlock.ForegroundProperty, foregroundBinding);
                 factory.SetValue(System.Windows.Controls.TextBlock.TextTrimmingProperty, System.Windows.TextTrimming.CharacterEllipsis);
-                var template = new DataTemplate { VisualTree = factory };
-                
                 // Calculate width based on actual data content - different for each keyword
                 double calculatedWidth = CalculateDataDrivenColumnWidth(keyword, true);
                 
@@ -333,7 +412,7 @@ namespace ApexAstro.Wpf.Services
                 {
                     Header = CreateSortableHeader(keyword, GetDisplayName(keyword)),
                     Width = calculatedWidth,
-                    CellTemplate = template
+                    CellTemplate = CreateTextCellTemplate(binding, foregroundBinding)
                 };
                 gridView.Columns.Add(column);
             }
@@ -355,8 +434,6 @@ namespace ApexAstro.Wpf.Services
                 foregroundBinding.Path = new System.Windows.PropertyPath("Resources[ThemeAccentBlue]");
                 factory.SetBinding(System.Windows.Controls.TextBlock.ForegroundProperty, foregroundBinding);
                 factory.SetValue(System.Windows.Controls.TextBlock.TextTrimmingProperty, System.Windows.TextTrimming.CharacterEllipsis);
-                var template = new DataTemplate { VisualTree = factory };
-                
                 // Calculate width based on actual data content - different for each keyword
                 double calculatedWidth = CalculateDataDrivenColumnWidth(keyword, false);
                 
@@ -364,7 +441,7 @@ namespace ApexAstro.Wpf.Services
                 {
                     Header = CreateSortableHeader(keyword, GetDisplayName(keyword)),
                     Width = calculatedWidth,
-                    CellTemplate = template
+                    CellTemplate = CreateTextCellTemplate(binding, foregroundBinding)
                 };
                 gridView.Columns.Add(column);
             }
@@ -384,15 +461,13 @@ namespace ApexAstro.Wpf.Services
                 foregroundBinding.Path = new System.Windows.PropertyPath("Resources[ThemeAccentOrange]");
                 factory.SetBinding(System.Windows.Controls.TextBlock.ForegroundProperty, foregroundBinding);
                 factory.SetValue(System.Windows.Controls.TextBlock.TextTrimmingProperty, System.Windows.TextTrimming.CharacterEllipsis);
-                var template = new DataTemplate { VisualTree = factory };
-
                 double calculatedWidth = CalculateDataDrivenColumnWidth(keyword, false);
 
                 var column = new GridViewColumn
                 {
                     Header = CreateSortableHeader(keyword, GetDisplayName(keyword)),
                     Width = calculatedWidth,
-                    CellTemplate = template
+                    CellTemplate = CreateTextCellTemplate(binding, foregroundBinding)
                 };
                 gridView.Columns.Add(column);
             }
@@ -592,8 +667,10 @@ namespace ApexAstro.Wpf.Services
                 return 80;
             }
             
-            // Apply reasonable min/max limits for other columns
-            optimalWidth = Math.Max(optimalWidth, 40);  // Minimum 40px
+            // Apply reasonable min/max limits for other columns.
+            // Keyword-specific minimums prevent decimal values from being ellipsized.
+            double keywordMinWidth = GetKeywordMinimumWidth(columnName);
+            optimalWidth = Math.Max(optimalWidth, Math.Max(40, keywordMinWidth));
             // Increase maximum to prevent cutoff for longer values (FILTER, IMAGETYP, etc.)
             optimalWidth = Math.Min(optimalWidth, 300); // Maximum 300px (was 200px)
             
@@ -1097,12 +1174,20 @@ namespace ApexAstro.Wpf.Services
 
             var currentTotalWidth = CalculateTotalColumnsWidth();
             var availableWidth = _fileListView.ActualWidth;
+            var targetWidth = GetFileColumnWidth();
+
+            if (fileColumn.Width > targetWidth)
+            {
+                fileColumn.Width = targetWidth;
+                return;
+            }
+
             var extraWidth = availableWidth - currentTotalWidth;
 
-            // Only grow columns; do not shrink here so content widths remain stable.
-            if (extraWidth > 1)
+            // Only grow toward the compact target width; do not expand beyond it.
+            if (extraWidth > 1 && fileColumn.Width < targetWidth)
             {
-                fileColumn.Width += extraWidth;
+                fileColumn.Width = Math.Min(targetWidth, fileColumn.Width + extraWidth);
             }
         }
 
@@ -1151,27 +1236,27 @@ namespace ApexAstro.Wpf.Services
         }
 
         /// <summary>
-        /// Gets the responsive width for the File column (35% of window width)
+        /// Gets the responsive width for the File column (narrower responsive width)
         /// </summary>
         private double GetFileColumnWidth()
         {
-            double targetWidth = 280; // Default fallback (increased from 200)
+            double targetWidth = 200; // Default fallback for a compact file column
 
             // Try to get the main window width first
             if (System.Windows.Application.Current.MainWindow?.ActualWidth > 0)
             {
-                targetWidth = System.Windows.Application.Current.MainWindow.ActualWidth * 0.35;
+                targetWidth = System.Windows.Application.Current.MainWindow.ActualWidth * 0.18;
             }
             // Then try ListView width as secondary option
             else if (_fileListView?.ActualWidth > 0)
             {
-                targetWidth = _fileListView.ActualWidth * 0.35;
+                targetWidth = _fileListView.ActualWidth * 0.18;
             }
             
 
             
-            // Ensure reasonable bounds: minimum 140px, maximum 400px (increased from 120px/300px)
-            return Math.Max(140, Math.Min(500, targetWidth));
+            // Ensure reasonable bounds: keep the name column compact but readable.
+            return Math.Max(110, Math.Min(260, targetWidth));
         }
 
         /// <summary>

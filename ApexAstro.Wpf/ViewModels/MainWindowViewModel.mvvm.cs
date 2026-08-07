@@ -41,8 +41,9 @@ namespace ApexAstro.Wpf.ViewModels
         private HistogramViewModel _histogramViewModel = new HistogramViewModel();  // Histogram view model
         private bool _isDirectoryReviewed;
         private bool _isLoadingDirectoryReviewedState;
-        private const string ReviewedMarkerFileName = ".aprxastro.reviewed.json";
-        private const string LegacyReviewedMarkerFileName = ".apexastro.reviewed";
+        private const string ReviewedMarkerFileName = ".apexastro.reviewed.json";
+        private const string LegacyReviewedMarkerFileName = ".aprxastro.reviewed.json";
+        private const string LegacyReviewedMarkerFileNameV1 = ".apexastro.reviewed";
         private string _temporalSnrStatusText = string.Empty;
         #endregion
 
@@ -842,6 +843,11 @@ namespace ApexAstro.Wpf.ViewModels
             return System.IO.Path.Combine(directoryPath, LegacyReviewedMarkerFileName);
         }
 
+        private string GetLegacyReviewedMarkerFilePathV1(string directoryPath)
+        {
+            return System.IO.Path.Combine(directoryPath, LegacyReviewedMarkerFileNameV1);
+        }
+
         private void LoadDirectoryReviewedState()
         {
             bool reviewed = false;
@@ -866,6 +872,23 @@ namespace ApexAstro.Wpf.ViewModels
                         catch (Exception ex)
                         {
                             _loggingService.LogError("Directory Review State", $"Failed to migrate legacy review marker in {CurrentDirectory}", ex);
+                        }
+                    }
+                    else
+                    {
+                        string legacyMarkerPathV1 = GetLegacyReviewedMarkerFilePathV1(CurrentDirectory);
+                        if (System.IO.File.Exists(legacyMarkerPathV1))
+                        {
+                            reviewed = true;
+                            try
+                            {
+                                WriteReviewedMarker(markerPath);
+                                System.IO.File.Delete(legacyMarkerPathV1);
+                            }
+                            catch (Exception ex)
+                            {
+                                _loggingService.LogError("Directory Review State", $"Failed to migrate legacy review marker in {CurrentDirectory}", ex);
+                            }
                         }
                     }
                 }
@@ -1488,12 +1511,13 @@ namespace ApexAstro.Wpf.ViewModels
             var selectedFolder = _folderDialogService.ShowFolderDialog(initialDirectory);
             if (!string.IsNullOrEmpty(selectedFolder))
             {
-                _appConfig.LastOpenDirectory = selectedFolder;
-                AddToRecentFolders(selectedFolder);
+                string resolvedFolder = ResolveFolderForImageLoad(selectedFolder);
+                _appConfig.LastOpenDirectory = resolvedFolder;
+                AddToRecentFolders(resolvedFolder);
                 _appConfig.Save();
                 
                 // Request the View to load files with a progress dialog
-                LoadFilesWithProgressRequested?.Invoke(selectedFolder);
+                LoadFilesWithProgressRequested?.Invoke(resolvedFolder);
             }
         }
         
@@ -1504,13 +1528,54 @@ namespace ApexAstro.Wpf.ViewModels
         {
             if (parameter is string folderPath && System.IO.Directory.Exists(folderPath))
             {
-                _appConfig.LastOpenDirectory = folderPath;
-                AddToRecentFolders(folderPath);
+                string resolvedFolder = ResolveFolderForImageLoad(folderPath);
+                _appConfig.LastOpenDirectory = resolvedFolder;
+                AddToRecentFolders(resolvedFolder);
                 _appConfig.Save();
                 
                 // Request the View to load files with a progress dialog
-                LoadFilesWithProgressRequested?.Invoke(folderPath);
+                LoadFilesWithProgressRequested?.Invoke(resolvedFolder);
             }
+        }
+
+        private static string ResolveFolderForImageLoad(string folderPath)
+        {
+            if (string.IsNullOrWhiteSpace(folderPath) || !System.IO.Directory.Exists(folderPath))
+                return folderPath;
+
+            string current = folderPath;
+
+            // Walk through wrapper folders like night_1/LIGHT where parent has no files
+            // and exactly one child directory.
+            for (int depth = 0; depth < 10; depth++)
+            {
+                bool hasFiles = System.IO.Directory.EnumerateFiles(current).Any();
+                if (hasFiles)
+                    break;
+
+                var subdirectories = System.IO.Directory
+                    .EnumerateDirectories(current)
+                    .Where(path =>
+                    {
+                        try
+                        {
+                            var attrs = System.IO.File.GetAttributes(path);
+                            return (attrs & System.IO.FileAttributes.Hidden) == 0 && (attrs & System.IO.FileAttributes.System) == 0;
+                        }
+                        catch
+                        {
+                            return false;
+                        }
+                    })
+                    .ToArray();
+
+                if (subdirectories.Length != 1)
+                    break;
+
+                current = subdirectories[0];
+            }
+
+            return current;
         }
         
         /// <summary>
@@ -1563,6 +1628,8 @@ namespace ApexAstro.Wpf.ViewModels
                 _appConfig.ShowFilenameFrameColumn,
                 _appConfig.ShowMedianColumn,
                 _appConfig.ShowPerFrameSnrColumn,
+                _appConfig.PerFrameSnrColorThreshold,
+                _appConfig.PerFrameSnrYellowThreshold,
                 _appConfig.Theme, 
                 _appConfig.ShowFullScreenHelp,
                 _appConfig.PlayPauseInterval,
@@ -1598,6 +1665,16 @@ namespace ApexAstro.Wpf.ViewModels
                 if (result.showPerFrameSnrColumn.HasValue)
                 {
                     _appConfig.ShowPerFrameSnrColumn = result.showPerFrameSnrColumn.Value;
+                }
+
+                if (result.perFrameSnrColorThreshold.HasValue)
+                {
+                    _appConfig.PerFrameSnrColorThreshold = result.perFrameSnrColorThreshold.Value;
+                }
+
+                if (result.perFrameSnrYellowThreshold.HasValue)
+                {
+                    _appConfig.PerFrameSnrYellowThreshold = result.perFrameSnrYellowThreshold.Value;
                 }
                 
                 if (result.theme.HasValue)

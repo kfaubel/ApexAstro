@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 
 namespace ApexAstro.Wpf
 {
@@ -830,11 +831,10 @@ namespace ApexAstro.Wpf
             var files = _viewModel.Files.ToList();
             var plan = _temporalSnrPlanningService.BuildPlan(files);
             _temporalSnrCacheService.TryLoadIfValid(folderPath, out var currentCacheManifest);
-            var preflight = new TemporalSnrPreflightDialog(plan, currentCacheManifest)
+            var preflight = new TemporalSnrPreflightDialog(plan, currentCacheManifest, folderPath)
             {
                 Owner = this
             };
-            preflight.KeepBestPercentText = _appConfig.PerFrameSnrKeepBestPercent.ToString("F0");
 
             if (preflight.ShowDialog() != true)
                 return;
@@ -845,13 +845,11 @@ namespace ApexAstro.Wpf
                 SaveIntermediateData = preflight.SaveIntermediateData,
                 StopOnMismatch = preflight.StopOnMismatch,
                 ComputePerFrameSnr = _appConfig.ShowPerFrameSnrColumn,
-                KeepBestPercent = preflight.KeepBestPercent,
+                KeepBestPercent = 80.0,
                 Profile = preflight.UseFullMachine ? TemporalSnrExecutionProfile.Max : TemporalSnrExecutionProfile.Auto,
                 MaxDegreeOfParallelism = preflight.UseFullMachine ? Environment.ProcessorCount : null
             };
 
-            _appConfig.PerFrameSnrKeepBestPercent = preflight.KeepBestPercent;
-            _appConfig.Save();
             _listViewColumnService?.UpdateListViewColumns();
 
             var progressWindow = new TemporalSnrProgressWindow(plan.EstimatedDuration)
@@ -889,7 +887,7 @@ namespace ApexAstro.Wpf
                         PercentComplete = 0.98,
                         OverallPercentComplete = 0.98,
                         CurrentFilterPercentComplete = 1.0,
-                        Message = "Saving temporal SNR cache and validation data"
+                        Message = "Saving SNR cache and validation data"
                     });
                     _temporalSnrCacheService.Save(folderPath, result);
                 }
@@ -903,37 +901,43 @@ namespace ApexAstro.Wpf
                 var resultSummary = BuildTemporalSnrSummary(result, stopwatch.Elapsed);
                 var filterSummaries = result.FilterResults.Values
                     .OrderBy(filter => filter.FilterName, StringComparer.OrdinalIgnoreCase)
-                    .Select(filter => new TemporalSnrFilterSummary
+                    .Select(filter =>
                     {
-                        FilterName = filter.FilterName,
-                        MedianTemporalSnr = filter.MedianTemporalSnr,
-                        MeanTemporalSnr = filter.MeanTemporalSnr,
-                        StandardDeviationTemporalSnr = filter.StandardDeviationTemporalSnr,
-                        FrameCount = filter.FrameCount
+                        double? integrationMinutes = ComputeIntegrationMinutes(filter, folderPath);
+                        return new TemporalSnrFilterSummary
+                        {
+                            FilterName = filter.FilterName,
+                            MedianTemporalSnr = filter.MedianTemporalSnr,
+                            FrameCount = filter.FrameCount,
+                            IntegrationMinutes = integrationMinutes,
+                            AdditionalMinutesTo30 = ComputeAdditionalMinutesForTargetSnr(filter.MedianTemporalSnr, integrationMinutes, 30.0),
+                            AdditionalMinutesTo60 = ComputeAdditionalMinutesForTargetSnr(filter.MedianTemporalSnr, integrationMinutes, 60.0),
+                            AdditionalMinutesTo90 = ComputeAdditionalMinutesForTargetSnr(filter.MedianTemporalSnr, integrationMinutes, 90.0)
+                        };
                     })
                     .ToList();
 
                 foreach (var step in result.FilterResults.Values)
                 {
                     _loggingService.LogInfo(
-                        $"Temporal SNR computed for {step.FilterName}: " +
+                        $"SNR computed for {step.FilterName}: " +
                         $"median={step.MedianTemporalSnr:F3}, mean={step.MeanTemporalSnr:F3}, stddev={step.StandardDeviationTemporalSnr:F3}, frames={step.FrameCount}");
                 }
 
-                progressWindow.MarkAllComplete($"Temporal SNR completed in {FormatSpan(stopwatch.Elapsed)}", null, filterSummaries);
+                progressWindow.MarkAllComplete($"SNR completed in {FormatSpan(stopwatch.Elapsed)}", null, filterSummaries);
                 _viewModel.TemporalSnrStatusText = resultSummary;
             }
             catch (OperationCanceledException)
             {
                 stopwatch.Stop();
-                progressWindow.MarkCancelled($"Temporal SNR canceled after {FormatSpan(stopwatch.Elapsed)}");
+                progressWindow.MarkCancelled($"SNR canceled after {FormatSpan(stopwatch.Elapsed)}");
                 _viewModel.TemporalSnrStatusText = $"SNR canceled after {FormatSpan(stopwatch.Elapsed)}";
             }
             catch (Exception ex)
             {
                 stopwatch.Stop();
-                _loggingService.LogError("Temporal SNR", $"Failed to compute temporal SNR for {folderPath}", ex);
-                System.Windows.MessageBox.Show($"Failed to compute temporal SNR:\n\n{ex.Message}", "Temporal SNR Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                _loggingService.LogError("SNR", $"Failed to compute SNR for {folderPath}", ex);
+                System.Windows.MessageBox.Show($"Failed to compute SNR:\n\n{ex.Message}", "SNR Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 _viewModel.TemporalSnrStatusText = "SNR failed";
             }
         }
@@ -955,6 +959,146 @@ namespace ApexAstro.Wpf
                 });
 
             return $"SNR ready in {FormatSpan(elapsed)} - {string.Join("; ", filterSummaries)}";
+        }
+
+        private static double? ComputeIntegrationMinutes(TemporalSnrFilterResult filter, string folderPath)
+        {
+            if (filter.SourceFiles == null || filter.SourceFiles.Count == 0)
+                return null;
+
+            double totalSeconds = 0.0;
+            int exposureCount = 0;
+
+            foreach (var source in filter.SourceFiles)
+            {
+                string filePath = System.IO.Path.Combine(folderPath, source.FileName);
+                double? exposureSeconds = TryReadExposureSeconds(filePath, source.FileName);
+                if (!exposureSeconds.HasValue || exposureSeconds.Value <= 0)
+                    continue;
+
+                totalSeconds += exposureSeconds.Value;
+                exposureCount++;
+            }
+
+            if (exposureCount == 0)
+                return null;
+
+            return totalSeconds / 60.0;
+        }
+
+        private static double? TryReadExposureSeconds(string filePath, string fallbackFileName)
+        {
+            try
+            {
+                if (System.IO.File.Exists(filePath))
+                {
+                    var headers = FitsParser.ParseHeaderFromFile(filePath);
+                    if (TryGetExposureFromHeader(headers, out double headerExposureSeconds))
+                        return headerExposureSeconds;
+                }
+            }
+            catch
+            {
+                // Fall back to filename parsing.
+            }
+
+            return TryParseExposureFromFilename(fallbackFileName);
+        }
+
+        private static bool TryGetExposureFromHeader(Dictionary<string, object> headers, out double exposureSeconds)
+        {
+            exposureSeconds = 0.0;
+
+            if (TryGetHeaderDouble(headers, "EXPTIME", out exposureSeconds))
+                return true;
+
+            if (TryGetHeaderDouble(headers, "EXPOSURE", out exposureSeconds))
+                return true;
+
+            return false;
+        }
+
+        private static bool TryGetHeaderDouble(Dictionary<string, object> headers, string key, out double value)
+        {
+            value = 0.0;
+            if (!headers.TryGetValue(key, out var raw) || raw == null)
+                return false;
+
+            if (raw is double d)
+            {
+                value = d;
+                return value > 0;
+            }
+
+            if (raw is float f)
+            {
+                value = f;
+                return value > 0;
+            }
+
+            if (raw is int i)
+            {
+                value = i;
+                return value > 0;
+            }
+
+            if (raw is long l)
+            {
+                value = l;
+                return value > 0;
+            }
+
+            string text = raw.ToString() ?? string.Empty;
+            if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed))
+            {
+                value = parsed;
+                return value > 0;
+            }
+
+            return false;
+        }
+
+        private static double? TryParseExposureFromFilename(string fileName)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+                return null;
+
+            string nameWithoutExtension = System.IO.Path.GetFileNameWithoutExtension(fileName);
+            if (string.IsNullOrWhiteSpace(nameWithoutExtension))
+                return null;
+
+            string[] tokens = nameWithoutExtension.Split('_', StringSplitOptions.RemoveEmptyEntries);
+            foreach (string token in tokens)
+            {
+                if (!token.EndsWith("s", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                string numericPart = token[..^1];
+                if (double.TryParse(numericPart, NumberStyles.Float, CultureInfo.InvariantCulture, out double seconds)
+                    && seconds > 0)
+                {
+                    return seconds;
+                }
+            }
+
+            return null;
+        }
+
+        private static double? ComputeAdditionalMinutesForTargetSnr(double currentMedianSnr, double? integrationMinutes, double targetSnr)
+        {
+            if (!integrationMinutes.HasValue || !double.IsFinite(integrationMinutes.Value) || integrationMinutes.Value <= 0)
+                return null;
+
+            if (!double.IsFinite(currentMedianSnr) || currentMedianSnr <= 0)
+                return null;
+
+            if (currentMedianSnr >= targetSnr)
+                return 0.0;
+
+            double scale = targetSnr / currentMedianSnr;
+            double requiredTotalMinutes = integrationMinutes.Value * scale * scale;
+            double additionalMinutes = requiredTotalMinutes - integrationMinutes.Value;
+            return Math.Max(0.0, additionalMinutes);
         }
 
         private void ApplyPerFrameSnrToFiles(IReadOnlyList<TemporalSnrFrameResult> frameResults)
@@ -982,8 +1126,9 @@ namespace ApexAstro.Wpf
                     continue;
 
                 file.PerFrameSnr = frame.FrameSnr;
-                file.PerFrameSnrGrade = frame.Grade;
-                file.PerFrameSnrBrush = GetSnrGradeBrush(frame.Grade);
+                string grade = GetSnrGrade(frame.FrameSnr, _appConfig.PerFrameSnrColorThreshold, _appConfig.PerFrameSnrYellowThreshold);
+                file.PerFrameSnrGrade = grade;
+                file.PerFrameSnrBrush = GetSnrGradeBrush(grade);
             }
         }
 
@@ -1087,6 +1232,26 @@ namespace ApexAstro.Wpf
                     return System.Windows.Application.Current.TryFindResource("ThemeSecondaryText") as System.Windows.Media.Brush
                         ?? System.Windows.Media.Brushes.Gray;
             }
+        }
+
+        private static string GetSnrGrade(double frameSnr, double greenThreshold, double yellowThreshold)
+        {
+            // Use the same 2-decimal precision as the displayed per-frame SNR values
+            // so color categories match what users see in the grid.
+            double roundedSnr = Math.Round(frameSnr, 2, MidpointRounding.ToEven);
+            double threshold = Math.Round(greenThreshold > 0 ? greenThreshold : 2.0, 2, MidpointRounding.ToEven);
+            double yellow = Math.Round(yellowThreshold > 0 ? yellowThreshold : 1.6, 2, MidpointRounding.ToEven);
+
+            if (yellow > threshold)
+                yellow = threshold;
+
+            if (roundedSnr >= threshold)
+                return "Green";
+
+            if (roundedSnr >= yellow)
+                return "Yellow";
+
+            return "Red";
         }
 
         private void ImageScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e)

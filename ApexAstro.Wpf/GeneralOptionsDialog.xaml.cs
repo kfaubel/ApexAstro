@@ -69,6 +69,16 @@ namespace ApexAstro.Wpf
         /// Property to track whether per-frame SNR should be shown in the file list.
         /// </summary>
         public bool ShowPerFrameSnrColumn { get; set; }
+
+        /// <summary>
+        /// Property to track the threshold used to color-code per-frame SNR values.
+        /// </summary>
+        public double PerFrameSnrColorThreshold { get; set; }
+
+        /// <summary>
+        /// Property to track the yellow threshold used to color-code per-frame SNR values.
+        /// </summary>
+        public double PerFrameSnrYellowThreshold { get; set; }
         
         /// <summary>
         /// Property to track whether to scan XISF files for FITS keywords.
@@ -142,7 +152,7 @@ namespace ApexAstro.Wpf
         /// <param name="scanXisfForFitsKeywords">Current value of the ScanXisfForFitsKeywords setting</param>
         /// <param name="medianDisplayMode">Current median display mode setting</param>
         /// <param name="showHistogram">Current value of the ShowHistogram setting</param>
-        public GeneralOptionsDialog(bool showSizeColumn, bool showFullFilename, bool showFilenameDateColumn, bool showFilenameTimeColumn, bool showFilenameFrameColumn, bool showMedianColumn, ThemeMode theme, bool showFullScreenHelp, double playPauseInterval, bool scanXisfForFitsKeywords, MedianDisplayMode medianDisplayMode, bool showHistogram, bool showPerFrameSnrColumn) : this()
+        public GeneralOptionsDialog(bool showSizeColumn, bool showFullFilename, bool showFilenameDateColumn, bool showFilenameTimeColumn, bool showFilenameFrameColumn, bool showMedianColumn, ThemeMode theme, bool showFullScreenHelp, double playPauseInterval, bool scanXisfForFitsKeywords, MedianDisplayMode medianDisplayMode, bool showHistogram, bool showPerFrameSnrColumn, double perFrameSnrColorThreshold, double perFrameSnrYellowThreshold) : this()
         {
             // Store the initial values in our properties
             ShowSizeColumn = showSizeColumn;
@@ -158,6 +168,8 @@ namespace ApexAstro.Wpf
             MedianDisplayMode = medianDisplayMode;
             ShowHistogram = showHistogram;
             ShowPerFrameSnrColumn = showPerFrameSnrColumn;
+            PerFrameSnrColorThreshold = perFrameSnrColorThreshold;
+            PerFrameSnrYellowThreshold = perFrameSnrYellowThreshold;
             
             // Set the checkbox state to match the current setting
             // ShowSizeColumnCheckBox is a UI control defined in the XAML file
@@ -170,6 +182,9 @@ namespace ApexAstro.Wpf
             ScanXisfForFitsKeywordsCheckBox.IsChecked = scanXisfForFitsKeywords;
             ShowHistogramCheckBox.IsChecked = showHistogram;
             ShowPerFrameSnrColumnCheckBox.IsChecked = showPerFrameSnrColumn;
+            PerFrameSnrThresholdTextBox.Text = perFrameSnrColorThreshold.ToString("F2");
+            PerFrameSnrYellowThresholdTextBox.Text = perFrameSnrYellowThreshold.ToString("F2");
+            PerFrameSnrThresholdPanel.IsEnabled = showPerFrameSnrColumn;
             
             // Set the median display mode radio buttons
             if (medianDisplayMode == MedianDisplayMode.Normalized)
@@ -323,6 +338,39 @@ namespace ApexAstro.Wpf
             ScanXisfForFitsKeywords = ScanXisfForFitsKeywordsCheckBox.IsChecked ?? false;
             ShowHistogram = ShowHistogramCheckBox.IsChecked ?? false;
             ShowPerFrameSnrColumn = ShowPerFrameSnrColumnCheckBox.IsChecked ?? false;
+
+            if (!double.TryParse(PerFrameSnrThresholdTextBox.Text, out double perFrameSnrThreshold) || perFrameSnrThreshold <= 0)
+            {
+                System.Windows.MessageBox.Show(
+                    "Per-frame SNR green threshold must be a number greater than 0.",
+                    "Invalid Per-frame SNR Green Threshold",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
+            if (!double.TryParse(PerFrameSnrYellowThresholdTextBox.Text, out double perFrameSnrYellowThreshold) || perFrameSnrYellowThreshold <= 0)
+            {
+                System.Windows.MessageBox.Show(
+                    "Per-frame SNR yellow threshold must be a number greater than 0.",
+                    "Invalid Per-frame SNR Yellow Threshold",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
+            if (perFrameSnrYellowThreshold > perFrameSnrThreshold)
+            {
+                System.Windows.MessageBox.Show(
+                    "Yellow threshold must be less than or equal to the green threshold.",
+                    "Invalid Per-frame SNR Thresholds",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
+            PerFrameSnrColorThreshold = perFrameSnrThreshold;
+            PerFrameSnrYellowThreshold = perFrameSnrYellowThreshold;
             
             // Read the median display mode from radio buttons
             MedianDisplayMode = (MedianNormalizedRadioButton.IsChecked ?? true) 
@@ -385,6 +433,11 @@ namespace ApexAstro.Wpf
         {
             // Enable the format panel only when the checkbox is checked
             MedianFormatPanel.IsEnabled = ShowMedianColumnCheckBox.IsChecked ?? false;
+        }
+
+        private void ShowPerFrameSnrColumnCheckBox_CheckedChanged(object sender, RoutedEventArgs e)
+        {
+            PerFrameSnrThresholdPanel.IsEnabled = ShowPerFrameSnrColumnCheckBox.IsChecked ?? false;
         }
     } // End of GeneralOptionsDialog class
 } // End of ApexAstro.Wpf namespace

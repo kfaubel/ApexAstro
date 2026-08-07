@@ -14,8 +14,10 @@ namespace ApexAstro.Wpf.Services
     /// </summary>
     public class TemporalSnrCacheService
     {
-        private const string CacheFileName = ".apexastro.temporal-snr.json";
-        private const string SummaryFileName = ".apexastro.snr.json";
+        private const string CacheFileName = ".apexastro.snr.json";
+        private const string LegacyCacheFileName = ".apexastro.temporal-snr.json";
+        private const string SummaryFileName = ".apexastro.snr-summary.json";
+        private const string LegacySummaryFileName = ".apexastro.snr.json";
         private const int SchemaVersion = 2;
         private const int SummarySchemaVersion = 2;
 
@@ -32,8 +34,8 @@ namespace ApexAstro.Wpf.Services
                 };
             }
 
-            bool hasCacheFile = File.Exists(GetCachePath(folderPath));
-            bool hasSummaryFile = File.Exists(GetSummaryPath(folderPath));
+            bool hasCacheFile = File.Exists(GetCachePath(folderPath)) || File.Exists(GetLegacyCachePath(folderPath));
+            bool hasSummaryFile = File.Exists(GetSummaryPath(folderPath)) || File.Exists(GetLegacySummaryPath(folderPath));
             bool isUpToDate = TryLoadIfValid(folderPath, out _);
 
             return new TemporalSnrFolderStatus
@@ -52,24 +54,38 @@ namespace ApexAstro.Wpf.Services
             if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
                 return false;
 
-            string cachePath = GetCachePath(folderPath);
-            if (!File.Exists(cachePath))
-                return false;
-
-            try
+            foreach (string cachePath in GetCandidateCachePaths(folderPath))
             {
-                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                manifest = JsonSerializer.Deserialize<TemporalSnrCacheManifest>(File.ReadAllText(cachePath), options);
-                if (manifest == null || manifest.SchemaVersion != SchemaVersion)
-                    return false;
+                if (!File.Exists(cachePath))
+                    continue;
 
-                return IsValid(folderPath, manifest);
+                try
+                {
+                    var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    manifest = JsonSerializer.Deserialize<TemporalSnrCacheManifest>(File.ReadAllText(cachePath), options);
+                    if (manifest == null || manifest.SchemaVersion != SchemaVersion)
+                    {
+                        manifest = null;
+                        continue;
+                    }
+
+                    if (manifest.Filters == null || manifest.Filters.Count == 0)
+                    {
+                        manifest = null;
+                        continue;
+                    }
+
+                    if (IsValid(folderPath, manifest))
+                        return true;
+                }
+                catch
+                {
+                    manifest = null;
+                }
             }
-            catch
-            {
-                manifest = null;
-                return false;
-            }
+
+            manifest = null;
+            return false;
         }
 
         public void Save(string folderPath, TemporalSnrComputationResult result)
@@ -91,6 +107,9 @@ namespace ApexAstro.Wpf.Services
                             Width = filter.Width,
                             Height = filter.Height,
                             FrameCount = filter.FrameCount,
+                            IntegrationMinutes = ComputeIntegrationMinutes(
+                                filter.SourceFiles.Select(source => source.FileName),
+                                folderPath),
                             ReferenceFile = filter.ReferenceFile,
                             MeanTemporalSnr = filter.MeanTemporalSnr,
                             MedianTemporalSnr = filter.MedianTemporalSnr,
@@ -139,6 +158,9 @@ namespace ApexAstro.Wpf.Services
                         {
                             FilterName = filter.FilterName,
                             FrameCount = filter.FrameCount,
+                            IntegrationMinutes = ComputeIntegrationMinutes(
+                                filter.SourceFiles.Select(source => source.FileName),
+                                folderPath),
                             MedianTemporalSnr = filter.MedianTemporalSnr,
                             MeanTemporalSnr = filter.MeanTemporalSnr,
                             StandardDeviationTemporalSnr = filter.StandardDeviationTemporalSnr,
@@ -179,24 +201,162 @@ namespace ApexAstro.Wpf.Services
             if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
                 return false;
 
-            string summaryPath = GetSummaryPath(folderPath);
-            if (!File.Exists(summaryPath))
-                return false;
+            foreach (string summaryPath in GetCandidateSummaryPaths(folderPath))
+            {
+                if (!File.Exists(summaryPath))
+                    continue;
 
+                try
+                {
+                    var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    summary = JsonSerializer.Deserialize<TemporalSnrProjectSummary>(File.ReadAllText(summaryPath), options);
+                    if (summary == null || summary.SchemaVersion < 1)
+                    {
+                        summary = null;
+                        continue;
+                    }
+
+                    bool hasSummaryData = (summary.FilterSummaries?.Count ?? 0) > 0
+                        || (summary.FrameSummaries?.Count ?? 0) > 0;
+                    if (!hasSummaryData)
+                    {
+                        summary = null;
+                        continue;
+                    }
+
+                    return true;
+                }
+                catch
+                {
+                    summary = null;
+                }
+            }
+
+            summary = null;
+            return false;
+        }
+
+        private static double? ComputeIntegrationMinutes(IEnumerable<string> sourceFileNames, string folderPath)
+        {
+            if (sourceFileNames == null)
+                return null;
+
+            double totalSeconds = 0.0;
+            int exposureCount = 0;
+
+            foreach (string fileName in sourceFileNames)
+            {
+                string filePath = Path.Combine(folderPath, fileName);
+                double? exposureSeconds = TryReadExposureSeconds(filePath, fileName);
+                if (!exposureSeconds.HasValue || exposureSeconds.Value <= 0)
+                    continue;
+
+                totalSeconds += exposureSeconds.Value;
+                exposureCount++;
+            }
+
+            if (exposureCount == 0)
+                return null;
+
+            return totalSeconds / 60.0;
+        }
+
+        private static double? TryReadExposureSeconds(string filePath, string fallbackFileName)
+        {
             try
             {
-                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                summary = JsonSerializer.Deserialize<TemporalSnrProjectSummary>(File.ReadAllText(summaryPath), options);
-                if (summary == null || summary.SchemaVersion < 1)
-                    return false;
-
-                return true;
+                if (File.Exists(filePath))
+                {
+                    var headers = FitsParser.ParseHeaderFromFile(filePath);
+                    if (TryGetExposureFromHeader(headers, out double headerExposureSeconds))
+                        return headerExposureSeconds;
+                }
             }
             catch
             {
-                summary = null;
-                return false;
+                // Fall back to filename parsing.
             }
+
+            return TryParseExposureFromFilename(fallbackFileName);
+        }
+
+        private static bool TryGetExposureFromHeader(Dictionary<string, object> headers, out double exposureSeconds)
+        {
+            exposureSeconds = 0.0;
+
+            if (TryGetHeaderDouble(headers, "EXPTIME", out exposureSeconds))
+                return true;
+
+            if (TryGetHeaderDouble(headers, "EXPOSURE", out exposureSeconds))
+                return true;
+
+            return false;
+        }
+
+        private static bool TryGetHeaderDouble(Dictionary<string, object> headers, string key, out double value)
+        {
+            value = 0.0;
+            if (!headers.TryGetValue(key, out var raw) || raw == null)
+                return false;
+
+            if (raw is double d)
+            {
+                value = d;
+                return value > 0;
+            }
+
+            if (raw is float f)
+            {
+                value = f;
+                return value > 0;
+            }
+
+            if (raw is int i)
+            {
+                value = i;
+                return value > 0;
+            }
+
+            if (raw is long l)
+            {
+                value = l;
+                return value > 0;
+            }
+
+            string text = raw.ToString() ?? string.Empty;
+            if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed))
+            {
+                value = parsed;
+                return value > 0;
+            }
+
+            return false;
+        }
+
+        private static double? TryParseExposureFromFilename(string fileName)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+                return null;
+
+            string nameWithoutExtension = Path.GetFileNameWithoutExtension(fileName);
+            if (string.IsNullOrWhiteSpace(nameWithoutExtension))
+                return null;
+
+            string[] tokens = nameWithoutExtension.Split('_', StringSplitOptions.RemoveEmptyEntries);
+            foreach (string token in tokens)
+            {
+                if (!token.EndsWith("s", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                string numericPart = token[..^1];
+                if (double.TryParse(numericPart, NumberStyles.Float, CultureInfo.InvariantCulture, out double seconds)
+                    && seconds > 0)
+                {
+                    return seconds;
+                }
+            }
+
+            return null;
         }
 
         private static bool IsValid(string folderPath, TemporalSnrCacheManifest manifest)
@@ -235,8 +395,22 @@ namespace ApexAstro.Wpf.Services
                 || extension.Equals(".fts", StringComparison.OrdinalIgnoreCase);
         }
 
+        private static IEnumerable<string> GetCandidateCachePaths(string folderPath)
+        {
+            yield return GetCachePath(folderPath);
+            yield return GetLegacyCachePath(folderPath);
+        }
+
+        private static IEnumerable<string> GetCandidateSummaryPaths(string folderPath)
+        {
+            yield return GetSummaryPath(folderPath);
+            yield return GetLegacySummaryPath(folderPath);
+        }
+
         private static string GetCachePath(string folderPath) => Path.Combine(folderPath, CacheFileName);
+        private static string GetLegacyCachePath(string folderPath) => Path.Combine(folderPath, LegacyCacheFileName);
         private static string GetSummaryPath(string folderPath) => Path.Combine(folderPath, SummaryFileName);
+        private static string GetLegacySummaryPath(string folderPath) => Path.Combine(folderPath, LegacySummaryFileName);
     }
 
     public sealed class TemporalSnrFolderStatus
@@ -263,6 +437,7 @@ namespace ApexAstro.Wpf.Services
         public int Width { get; set; }
         public int Height { get; set; }
         public int FrameCount { get; set; }
+        public double? IntegrationMinutes { get; set; }
         public string ReferenceFile { get; set; } = string.Empty;
         public double MeanTemporalSnr { get; set; }
         public double MedianTemporalSnr { get; set; }
@@ -294,6 +469,7 @@ namespace ApexAstro.Wpf.Services
     {
         public string FilterName { get; set; } = string.Empty;
         public int FrameCount { get; set; }
+        public double? IntegrationMinutes { get; set; }
         public double MedianTemporalSnr { get; set; }
         public double MeanTemporalSnr { get; set; }
         public double StandardDeviationTemporalSnr { get; set; }
