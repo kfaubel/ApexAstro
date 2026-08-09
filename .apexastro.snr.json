@@ -1,0 +1,113 @@
+{
+  "SchemaVersion": 2,
+  "ComputedUtc": "2026-08-07T23:49:57.7054632Z",
+  "FolderPath": ".",
+  "Filters": [
+    {
+      "FilterName": "B",
+      "Width": 6248,
+      "Height": 4176,
+      "FrameCount": 1,
+      "IntegrationMinutes": 1,
+      "ReferenceFile": ".\\2026-03-24_23-37-40_B_RMS_0.72_HFR_2.32_ECC_0.64_Stars_458_100_60.00s_-10.00C_0216.fits",
+      "MeanTemporalSnr": 0,
+      "MedianTemporalSnr": 0,
+      "StandardDeviationTemporalSnr": 0,
+      "SourceFiles": [
+        {
+          "FileName": "2026-03-24_23-37-40_B_RMS_0.72_HFR_2.32_ECC_0.64_Stars_458_100_60.00s_-10.00C_0216.fits",
+          "LastWriteUtc": "2026-03-25T04:38:43.015Z",
+          "FileSizeBytes": 52191360,
+          "Width": 6248,
+          "Height": 4176,
+          "Bitpix": 16,
+          "Hfr": 2.32
+        }
+      ]
+    },
+    {
+      "FilterName": "G",
+      "Width": 6248,
+      "Height": 4176,
+      "FrameCount": 1,
+      "IntegrationMinutes": 1,
+      "ReferenceFile": ".\\2026-03-24_23-33-32_G_RMS_0.71_HFR_2.50_ECC_0.62_Stars_411_100_60.00s_-10.00C_0216.fits",
+      "MeanTemporalSnr": 0,
+      "MedianTemporalSnr": 0,
+      "StandardDeviationTemporalSnr": 0,
+      "SourceFiles": [
+        {
+          "FileName": "2026-03-24_23-33-32_G_RMS_0.71_HFR_2.50_ECC_0.62_Stars_411_100_60.00s_-10.00C_0216.fits",
+          "LastWriteUtc": "2026-03-25T04:34:35.089Z",
+          "FileSizeBytes": 52191360,
+          "Width": 6248,
+          "Height": 4176,
+          "Bitpix": 16,
+          "Hfr": 2.5
+        }
+      ]
+    },
+    {
+      "FilterName": "L",
+      "Width": 6248,
+      "Height": 4176,
+      "FrameCount": 3,
+      "IntegrationMinutes": 3,
+      "ReferenceFile": ".\\2026-03-27_06-38-15_L_RMS_0.58_HFR_1.90_ECC_0.45_Stars_261_100_60.00s_-10.00C_0755.fits",
+      "MeanTemporalSnr": 0,
+      "MedianTemporalSnr": 0,
+      "StandardDeviationTemporalSnr": 0,
+      "SourceFiles": [
+        {
+          "FileName": "2026-03-27_00-12-43_L_RMS_0.67_HFR_2.12_ECC_0.59_Stars_359_100_60.00s_-10.00C_0456.fits",
+          "LastWriteUtc": "2026-03-27T05:13:46.142Z",
+          "FileSizeBytes": 52191360,
+          "Width": 6248,
+          "Height": 4176,
+          "Bitpix": 16,
+          "Hfr": 2.12
+        },
+        {
+          "FileName": "2026-03-27_06-38-15_L_RMS_0.58_HFR_1.90_ECC_0.45_Stars_261_100_60.00s_-10.00C_0755.fits",
+          "LastWriteUtc": "2026-03-27T11:39:17.497Z",
+          "FileSizeBytes": 52191360,
+          "Width": 6248,
+          "Height": 4176,
+          "Bitpix": 16,
+          "Hfr": 1.9
+        },
+        {
+          "FileName": "sample.fits",
+          "LastWriteUtc": "2026-03-27T05:13:46.142Z",
+          "FileSizeBytes": 52191360,
+          "Width": 6248,
+          "Height": 4176,
+          "Bitpix": 16,
+          "Hfr": null
+        }
+      ]
+    },
+    {
+      "FilterName": "R",
+      "Width": 6248,
+      "Height": 4176,
+      "FrameCount": 1,
+      "IntegrationMinutes": 1,
+      "ReferenceFile": ".\\2026-03-24_23-43-12_R_RMS_0.52_HFR_1.96_ECC_0.42_Stars_605_100_60.00s_-10.00C_0219.fits",
+      "MeanTemporalSnr": 0,
+      "MedianTemporalSnr": 0,
+      "StandardDeviationTemporalSnr": 0,
+      "SourceFiles": [
+        {
+          "FileName": "2026-03-24_23-43-12_R_RMS_0.52_HFR_1.96_ECC_0.42_Stars_605_100_60.00s_-10.00C_0219.fits",
+          "LastWriteUtc": "2026-03-25T04:44:15.026Z",
+          "FileSizeBytes": 52191360,
+          "Width": 6248,
+          "Height": 4176,
+          "Bitpix": 16,
+          "Hfr": 1.96
+        }
+      ]
+    }
+  ]
+}

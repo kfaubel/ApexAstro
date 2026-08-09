@@ -32,19 +32,8 @@
                 CornerRadius="4"
                 Padding="10"
                 Margin="0,0,0,12">
-            <StackPanel>
-                <CheckBox x:Name="MarkBottomSnrCheckBox"
-                          Content="Also mark bottom x% by per-frame SNR"
-                          Margin="0,0,0,6"/>
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="Bottom %:"
-                               VerticalAlignment="Center"
-                               Margin="0,0,8,0"/>
-                    <TextBox x:Name="BottomSnrPercentTextBox"
-                             Width="70"
-                             Text="20"/>
-                </StackPanel>
-            </StackPanel>
+            <TextBlock Text="Configure keyword-based criteria below."
+                       Foreground="{DynamicResource ThemeSecondaryText}"/>
         </Border>
 
         <!-- Table -->

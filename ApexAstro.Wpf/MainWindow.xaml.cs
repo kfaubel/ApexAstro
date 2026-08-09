@@ -500,7 +500,7 @@ namespace ApexAstro.Wpf
 
             if (loadSucceeded)
             {
-                await RefreshPerFrameSnrStateForCurrentFolderAsync(promptIfOutOfDate: true, reason: "folder open");
+                // No additional action required after folder load.
             }
         }
 
@@ -835,16 +835,21 @@ namespace ApexAstro.Wpf
             {
                 Owner = this
             };
+            preflight.SetInitialSamplePixelCount(_appConfig.TemporalSnrSamplePixelCount);
 
             if (preflight.ShowDialog() != true)
                 return;
+
+            _appConfig.TemporalSnrSamplePixelCount = preflight.SamplePixelCount;
+            _appConfig.Save();
 
             var options = new TemporalSnrOptions
             {
                 UseFullMachine = preflight.UseFullMachine,
                 SaveIntermediateData = preflight.SaveIntermediateData,
                 StopOnMismatch = preflight.StopOnMismatch,
-                ComputePerFrameSnr = _appConfig.ShowPerFrameSnrColumn,
+                SamplePixelCount = preflight.SamplePixelCount,
+                ComputePerFrameSnr = false,
                 KeepBestPercent = 80.0,
                 Profile = preflight.UseFullMachine ? TemporalSnrExecutionProfile.Max : TemporalSnrExecutionProfile.Auto,
                 MaxDegreeOfParallelism = preflight.UseFullMachine ? Environment.ProcessorCount : null
@@ -893,26 +898,36 @@ namespace ApexAstro.Wpf
                 }
 
                 _temporalSnrCacheService.SaveProjectSummary(folderPath, result);
-                ApplyPerFrameSnrToFiles(result.FrameResults);
-
                 stopwatch.Stop();
                 _temporalSnrPlanningService.RecordObservedRun(files, stopwatch.Elapsed);
 
                 var resultSummary = BuildTemporalSnrSummary(result, stopwatch.Elapsed);
+                string snrContextLabel = BuildSnrContextLabel(folderPath);
                 var filterSummaries = result.FilterResults.Values
                     .OrderBy(filter => filter.FilterName, StringComparer.OrdinalIgnoreCase)
                     .Select(filter =>
                     {
                         double? integrationMinutes = ComputeIntegrationMinutes(filter, folderPath);
+                        double planningSnr = ResolvePlanningSnr(filter.StackEquivalentSnr, filter.MedianTemporalSnr, filter.TargetMedianTemporalSnr);
+                        string planningSnrSource = IsFinitePositive(filter.StackEquivalentSnr)
+                            ? "Gemini signal"
+                            : IsFinitePositive(filter.TargetMedianTemporalSnr)
+                                ? "Target"
+                                : "Median (fallback)";
                         return new TemporalSnrFilterSummary
                         {
                             FilterName = filter.FilterName,
                             MedianTemporalSnr = filter.MedianTemporalSnr,
+                            TargetMedianTemporalSnr = filter.TargetMedianTemporalSnr,
+                            BackgroundMedianTemporalSnr = filter.BackgroundMedianTemporalSnr,
+                            StackEquivalentSnr = filter.StackEquivalentSnr,
                             FrameCount = filter.FrameCount,
+                            SnrContextLabel = snrContextLabel,
+                            PlanningSnrSource = planningSnrSource,
                             IntegrationMinutes = integrationMinutes,
-                            AdditionalMinutesTo30 = ComputeAdditionalMinutesForTargetSnr(filter.MedianTemporalSnr, integrationMinutes, 30.0),
-                            AdditionalMinutesTo60 = ComputeAdditionalMinutesForTargetSnr(filter.MedianTemporalSnr, integrationMinutes, 60.0),
-                            AdditionalMinutesTo90 = ComputeAdditionalMinutesForTargetSnr(filter.MedianTemporalSnr, integrationMinutes, 90.0)
+                            AdditionalMinutesTo30 = ComputeAdditionalMinutesForTargetSnr(planningSnr, integrationMinutes, 30.0),
+                            AdditionalMinutesTo60 = ComputeAdditionalMinutesForTargetSnr(planningSnr, integrationMinutes, 60.0),
+                            AdditionalMinutesTo90 = ComputeAdditionalMinutesForTargetSnr(planningSnr, integrationMinutes, 90.0)
                         };
                     })
                     .ToList();
@@ -921,7 +936,7 @@ namespace ApexAstro.Wpf
                 {
                     _loggingService.LogInfo(
                         $"SNR computed for {step.FilterName}: " +
-                        $"median={step.MedianTemporalSnr:F3}, mean={step.MeanTemporalSnr:F3}, stddev={step.StandardDeviationTemporalSnr:F3}, frames={step.FrameCount}");
+                        $"median={step.MedianTemporalSnr:F3}, mean={step.MeanTemporalSnr:F3}, stddev={step.StandardDeviationTemporalSnr:F3}, stackEq={step.StackEquivalentSnr.GetValueOrDefault():F3}, frames={step.FrameCount}");
                 }
 
                 progressWindow.MarkAllComplete($"SNR completed in {FormatSpan(stopwatch.Elapsed)}", null, filterSummaries);
@@ -955,7 +970,13 @@ namespace ApexAstro.Wpf
                 {
                     double cv = filter.MeanTemporalSnr > 1e-9 ? filter.StandardDeviationTemporalSnr / filter.MeanTemporalSnr : 0.0;
                     string grade = cv < 0.15 ? "Green" : cv < 0.30 ? "Yellow" : "Red";
-                    return $"{filter.FilterName}: median {filter.MedianTemporalSnr:F2}, mean {filter.MeanTemporalSnr:F2}, stddev {filter.StandardDeviationTemporalSnr:F2}, CV {cv:P1} ({grade}), {filter.FrameCount} frames";
+                    string split = (filter.TargetMedianTemporalSnr.HasValue && filter.BackgroundMedianTemporalSnr.HasValue)
+                        ? $", target/background {filter.TargetMedianTemporalSnr.Value:F2}/{filter.BackgroundMedianTemporalSnr.Value:F2}"
+                        : string.Empty;
+                    string stackEq = IsFinitePositive(filter.StackEquivalentSnr)
+                        ? $", gemini signal {filter.StackEquivalentSnr!.Value:F2}"
+                        : string.Empty;
+                    return $"{filter.FilterName}: median {filter.MedianTemporalSnr:F2}{split}{stackEq}, mean {filter.MeanTemporalSnr:F2}, stddev {filter.StandardDeviationTemporalSnr:F2}, CV {cv:P1} ({grade}), {filter.FrameCount} frames";
                 });
 
             return $"SNR ready in {FormatSpan(elapsed)} - {string.Join("; ", filterSummaries)}";
@@ -1101,157 +1122,29 @@ namespace ApexAstro.Wpf
             return Math.Max(0.0, additionalMinutes);
         }
 
-        private void ApplyPerFrameSnrToFiles(IReadOnlyList<TemporalSnrFrameResult> frameResults)
+        private static double ResolvePlanningSnr(double? stackEquivalentSnr, double medianTemporalSnr, double? targetMedianTemporalSnr)
         {
-            if (_viewModel == null)
-                return;
+            if (IsFinitePositive(stackEquivalentSnr))
+                return stackEquivalentSnr!.Value;
 
-            foreach (var file in _viewModel.Files)
-            {
-                file.PerFrameSnr = null;
-                file.PerFrameSnrGrade = string.Empty;
-                file.PerFrameSnrBrush = System.Windows.Media.Brushes.Transparent;
-            }
+            if (IsFinitePositive(targetMedianTemporalSnr))
+                return targetMedianTemporalSnr!.Value;
 
-            if (frameResults.Count == 0)
-                return;
-
-            var byFileName = frameResults
-                .GroupBy(result => result.FileName, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-
-            foreach (var file in _viewModel.Files)
-            {
-                if (!byFileName.TryGetValue(file.Name, out var frame))
-                    continue;
-
-                file.PerFrameSnr = frame.FrameSnr;
-                string grade = GetSnrGrade(frame.FrameSnr, _appConfig.PerFrameSnrColorThreshold, _appConfig.PerFrameSnrYellowThreshold);
-                file.PerFrameSnrGrade = grade;
-                file.PerFrameSnrBrush = GetSnrGradeBrush(grade);
-            }
+            return medianTemporalSnr;
         }
 
-        private async Task RefreshPerFrameSnrStateForCurrentFolderAsync(bool promptIfOutOfDate, string reason)
+        private static bool IsFinitePositive(double? value)
         {
-            if (_viewModel == null || string.IsNullOrWhiteSpace(_viewModel.CurrentDirectory))
-                return;
-
-            var status = _temporalSnrCacheService.GetFolderStatus(_viewModel.CurrentDirectory);
-            if (status.IsUpToDate)
-            {
-                if (_appConfig.ShowPerFrameSnrColumn)
-                {
-                    EnsurePerFrameSnrLoadedFromSummary();
-                }
-
-                return;
-            }
-
-            // Never show stale per-frame SNR values.
-            ApplyPerFrameSnrToFiles(Array.Empty<TemporalSnrFrameResult>());
-
-            if (status.IsOutOfDate)
-            {
-                _viewModel.TemporalSnrStatusText = "SNR data out of date";
-
-                if (!promptIfOutOfDate)
-                    return;
-
-                var message = "The SNR data for this folder is out of date.\n\n" +
-                              "Would you like to update it now?";
-
-                var result = System.Windows.MessageBox.Show(
-                    message,
-                    "SNR Update Available",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Information,
-                    MessageBoxResult.Yes);
-
-                if (result == MessageBoxResult.Yes)
-                {
-                    _loggingService.LogInfo($"Prompting SNR recompute after {reason}; user chose update now.");
-                    await ComputeSnrWithProgressAsync();
-                }
-                else
-                {
-                    _loggingService.LogInfo($"Prompting SNR recompute after {reason}; user chose update later.");
-                }
-            }
+            return value.HasValue && double.IsFinite(value.Value) && value.Value > 0;
         }
 
-        private bool EnsurePerFrameSnrLoadedFromSummary()
+        private static string BuildSnrContextLabel(string? folderPath)
         {
-            if (_viewModel == null || string.IsNullOrWhiteSpace(_viewModel.CurrentDirectory))
-                return false;
+            if (string.IsNullOrWhiteSpace(folderPath))
+                return "Current folder";
 
-            var status = _temporalSnrCacheService.GetFolderStatus(_viewModel.CurrentDirectory);
-            if (!status.IsUpToDate)
-            {
-                ApplyPerFrameSnrToFiles(Array.Empty<TemporalSnrFrameResult>());
-                return false;
-            }
-
-            bool hasAnyPerFrame = _viewModel.Files.Any(file => file.PerFrameSnr.HasValue);
-            if (hasAnyPerFrame)
-                return true;
-
-            if (!_temporalSnrCacheService.TryLoadProjectSummary(_viewModel.CurrentDirectory, out var summary) || summary?.FrameSummaries == null)
-                return false;
-
-            var loadedFrames = summary.FrameSummaries
-                .Where(frame => !string.IsNullOrWhiteSpace(frame.FileName))
-                .Select(frame => new TemporalSnrFrameResult
-                {
-                    FileName = frame.FileName,
-                    FilterName = frame.FilterName,
-                    FrameSnr = frame.FrameSnr,
-                    Grade = frame.Grade,
-                    Keep = frame.Keep,
-                    Rank = frame.Rank,
-                    FrameCountInFilter = frame.FrameCountInFilter
-                })
-                .ToList();
-
-            ApplyPerFrameSnrToFiles(loadedFrames);
-            return loadedFrames.Count > 0;
-        }
-
-        private static System.Windows.Media.Brush GetSnrGradeBrush(string? grade)
-        {
-            switch (grade?.Trim().ToUpperInvariant())
-            {
-                case "GREEN":
-                    return System.Windows.Application.Current.TryFindResource("ThemeAccentGreen") as System.Windows.Media.Brush
-                        ?? new SolidColorBrush(System.Windows.Media.Color.FromRgb(0, 160, 0));
-                case "YELLOW":
-                    return new SolidColorBrush(System.Windows.Media.Color.FromRgb(220, 170, 0));
-                case "RED":
-                    return new SolidColorBrush(System.Windows.Media.Color.FromRgb(220, 60, 60));
-                default:
-                    return System.Windows.Application.Current.TryFindResource("ThemeSecondaryText") as System.Windows.Media.Brush
-                        ?? System.Windows.Media.Brushes.Gray;
-            }
-        }
-
-        private static string GetSnrGrade(double frameSnr, double greenThreshold, double yellowThreshold)
-        {
-            // Use the same 2-decimal precision as the displayed per-frame SNR values
-            // so color categories match what users see in the grid.
-            double roundedSnr = Math.Round(frameSnr, 2, MidpointRounding.ToEven);
-            double threshold = Math.Round(greenThreshold > 0 ? greenThreshold : 2.0, 2, MidpointRounding.ToEven);
-            double yellow = Math.Round(yellowThreshold > 0 ? yellowThreshold : 1.6, 2, MidpointRounding.ToEven);
-
-            if (yellow > threshold)
-                yellow = threshold;
-
-            if (roundedSnr >= threshold)
-                return "Green";
-
-            if (roundedSnr >= yellow)
-                return "Yellow";
-
-            return "Red";
+            string name = System.IO.Path.GetFileName(folderPath.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar));
+            return string.IsNullOrWhiteSpace(name) ? "Current folder" : name;
         }
 
         private void ImageScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -2316,49 +2209,33 @@ namespace ApexAstro.Wpf
             var autoMarkDialog = new AutoMarkDialog(
                 _appConfig.CustomKeywords,
                 _appConfig.FitsKeywords,
-                _appConfig.AutoSelectCriteria,
-                _appConfig.AutoSelectMarkBottomPerFrameSnr,
-                _appConfig.AutoSelectBottomPerFrameSnrPercent)
+                _appConfig.AutoSelectCriteria)
             {
                 Owner = this
             };
 
-            EnsurePerFrameSnrLoadedFromSummary();
-
             // Handle the Apply event
             autoMarkDialog.ApplyRequested += (dialogSender, criteria) =>
             {
-                ApplyAutoMark(criteria, autoMarkDialog.MarkBottomPerFrameSnr, autoMarkDialog.BottomPerFrameSnrPercent);
+                ApplyAutoMark(criteria);
             };
 
             var result = autoMarkDialog.ShowDialog();
             if (result == true)
             {
                 _appConfig.AutoSelectCriteria = autoMarkDialog.GetCurrentSettings();
-                _appConfig.AutoSelectMarkBottomPerFrameSnr = autoMarkDialog.MarkBottomPerFrameSnr;
-                _appConfig.AutoSelectBottomPerFrameSnrPercent = autoMarkDialog.BottomPerFrameSnrPercent;
                 _appConfig.Save();
             }
         }
 
-        private async void MoveSelectedButton_Click(object sender, RoutedEventArgs e)
+        private void MoveSelectedButton_Click(object sender, RoutedEventArgs e)
         {
             if (_viewModel == null)
                 return;
 
-            int beforeCount = _viewModel.FileCount;
-            int selectedBefore = _viewModel.Files.Count(file => file.IsSelected);
-
             if (_viewModel.MoveSelectedCommand.CanExecute(null))
             {
                 _viewModel.MoveSelectedCommand.Execute(null);
-            }
-
-            int afterCount = _viewModel.FileCount;
-            bool filesMoved = selectedBefore > 0 && afterCount < beforeCount;
-            if (filesMoved)
-            {
-                await RefreshPerFrameSnrStateForCurrentFolderAsync(promptIfOutOfDate: true, reason: "moving files");
             }
         }
 
@@ -2395,7 +2272,7 @@ namespace ApexAstro.Wpf
         /// <summary>
         /// Applies auto-mark logic: marks files for deletion that don't meet the criteria
         /// </summary>
-        private void ApplyAutoMark(List<AutoMarkCriteria> criteriaList, bool markBottomPerFrameSnr, double bottomPercent)
+        private void ApplyAutoMark(List<AutoMarkCriteria> criteriaList)
         {
             if (_viewModel?.Files == null)
                 return;
@@ -2458,30 +2335,6 @@ namespace ApexAstro.Wpf
                         markedCount++;
                         _loggingService.LogInfo($"Auto-mark: Marked '{fileItem.Name}' - {failedKeyword}={failedValue}");
                     }
-                }
-
-                if (markBottomPerFrameSnr)
-                {
-                    EnsurePerFrameSnrLoadedFromSummary();
-                    var ranked = _viewModel.Files
-                        .Where(file => file.PerFrameSnr.HasValue)
-                        .OrderBy(file => file.PerFrameSnr)
-                        .ToList();
-
-                    int toMarkCount = ranked.Count == 0
-                        ? 0
-                        : Math.Clamp((int)Math.Ceiling(ranked.Count * (bottomPercent / 100.0)), 1, ranked.Count);
-
-                    foreach (var file in ranked.Take(toMarkCount))
-                    {
-                        if (!file.IsSelected)
-                        {
-                            file.IsSelected = true;
-                            markedCount++;
-                        }
-                    }
-
-                    _loggingService.LogInfo($"Auto-mark: Bottom SNR mode enabled; marked {toMarkCount} lowest per-frame SNR files out of {ranked.Count} using threshold {bottomPercent:F1}%.");
                 }
 
                 _loggingService.LogInfo($"Auto-mark: Marked {markedCount} of {_viewModel.Files.Count} files for deletion based on criteria");

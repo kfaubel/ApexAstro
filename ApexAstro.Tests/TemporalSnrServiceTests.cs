@@ -19,10 +19,10 @@ namespace ApexAstro.Tests
         }
 
         [Fact]
-        public void ComputeDirectory_GroupsByFilterAndRejectsOutlierWithMad()
+        public void ComputeDirectory_GroupsByFilterWithGeminiTemporalSnr()
         {
-            int width = 4;
-            int height = 4;
+            int width = 8;
+            int height = 8;
             int pixelCount = width * height;
 
             short[] baseR1 = Enumerable.Repeat((short)100, pixelCount).ToArray();
@@ -60,7 +60,7 @@ namespace ApexAstro.Tests
             TemporalSnrFilterResult rResult = result.FilterResults["R"];
             Assert.Equal(width * height, rResult.TemporalSnrMap.Length);
             Assert.Equal(width * height, rResult.RejectedSampleCountMap.Length);
-            Assert.Equal(1, rResult.RejectedSampleCountMap[5]);
+            Assert.True(rResult.RejectedSampleCountMap.All(v => v == 0));
             Assert.Contains("_R_", Path.GetFileName(rResult.ReferenceFile), StringComparison.OrdinalIgnoreCase);
 
             TemporalSnrFilterResult gResult = result.FilterResults["G"];
@@ -122,7 +122,51 @@ namespace ApexAstro.Tests
             Assert.Equal(pixelCount - 50, unsampledPointCount);
         }
 
-        private static void WriteFits16(string filePath, int width, int height, string filter, short[] pixels)
+        [Fact]
+        public void ComputeDirectory_WithBzeroOffset_ComputesFiniteGeminiTemporalSnr()
+        {
+            int width = 4;
+            int height = 4;
+            int pixelCount = width * height;
+
+            // Mostly flat background near BZERO with one varying target pixel. The result should
+            // retain non-zero target SNR without inflating the whole frame from offsets.
+            int[] frame1 = Enumerable.Repeat(32768, pixelCount).ToArray();
+            int[] frame2 = Enumerable.Repeat(32768, pixelCount).ToArray();
+            int[] frame3 = Enumerable.Repeat(32768, pixelCount).ToArray();
+            for (int i = 0; i < 10; i++)
+            {
+                frame1[i] = 32778;
+                frame2[i] = 32779;
+                frame3[i] = 32777;
+            }
+
+            WriteFits16(Path.Combine(_tempDirectory, "2026-01-01_00-00-01_L_0001.fits"), width, height, "L", frame1, bzero: 32768);
+            WriteFits16(Path.Combine(_tempDirectory, "2026-01-01_00-00-02_L_0002.fits"), width, height, "L", frame2, bzero: 32768);
+            WriteFits16(Path.Combine(_tempDirectory, "2026-01-01_00-00-03_L_0003.fits"), width, height, "L", frame3, bzero: 32768);
+
+            var service = new TemporalSnrService();
+            var options = new TemporalSnrOptions
+            {
+                RegisterFrames = false,
+                MinSamples = 2,
+                SamplePixelCount = 0,
+                Profile = TemporalSnrExecutionProfile.Portable
+            };
+
+            TemporalSnrComputationResult result = service.ComputeDirectory(_tempDirectory, options);
+            TemporalSnrFilterResult lResult = result.FilterResults["L"];
+
+            Assert.True(double.IsFinite(lResult.MedianTemporalSnr));
+            Assert.True(lResult.MedianTemporalSnr > 0.0);
+        }
+
+        private static void WriteFits16(string filePath, int width, int height, string filter, short[] pixels, int bzero = 0)
+        {
+            WriteFits16(filePath, width, height, filter, pixels.Select(value => (int)value).ToArray(), bzero);
+        }
+
+        private static void WriteFits16(string filePath, int width, int height, string filter, int[] pixels, int bzero = 0)
         {
             if (pixels.Length != width * height)
                 throw new ArgumentException("Pixel array size does not match dimensions", nameof(pixels));
@@ -138,11 +182,21 @@ namespace ApexAstro.Tests
                 BuildCard("END", string.Empty, false)
             };
 
+            if (bzero != 0)
+            {
+                cards.Insert(5, BuildCard("BZERO", bzero.ToString()));
+                cards.Insert(6, BuildCard("BSCALE", "1"));
+            }
+
             byte[] headerBytes = BuildHeader(cards);
             byte[] dataBytes = new byte[pixels.Length * 2];
             for (int i = 0; i < pixels.Length; i++)
             {
-                short value = pixels[i];
+                int rawValue = pixels[i] - bzero;
+                if (rawValue < short.MinValue || rawValue > short.MaxValue)
+                    throw new ArgumentOutOfRangeException(nameof(pixels), "Raw FITS sample value is out of Int16 range after BZERO adjustment.");
+
+                short value = (short)rawValue;
                 dataBytes[i * 2] = (byte)((value >> 8) & 0xFF);
                 dataBytes[i * 2 + 1] = (byte)(value & 0xFF);
             }

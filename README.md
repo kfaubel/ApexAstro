@@ -47,6 +47,37 @@ This app can parse RMS, HFR, ECCENTRICITY, FWHM, Stars, and other quality metric
 
 ---
 
+## Third-Party Packages
+
+ApexAstro uses the following non-Microsoft third-party NuGet dependencies.
+
+### Runtime packages (app/core)
+
+| Package | Version | Project(s) | Why it's used | How it's used in ApexAstro |
+|---|---:|---|---|---|
+| OxyPlot.Wpf | 2.2.0 | ApexAstro.Wpf | Plotting library for desktop charts | Powers the graph window (`PlotView`, axes, and series rendering) for metadata visualization. |
+| MetadataExtractor | 2.8.1 | ApexAstro.Wpf | Reads metadata from standard image formats | Used in the file metadata dialog to parse EXIF/IPTC/XMP-style metadata for non-FITS images. |
+| MathNet.Numerics | 5.0.0 | ApexAstro.Core | Numerical/statistical utilities | Included in the core library to support advanced numeric workloads around image analysis/SNR computations. |
+| OpenCvSharp4 | 4.10.0.20240616 | ApexAstro.Core | OpenCV bindings for .NET | Used in temporal SNR processing for image registration/alignment operations (for example ECC transform estimation and affine warping). |
+| OpenCvSharp4.runtime.win | 4.10.0.20240616 | ApexAstro.Core | Native Windows runtime binaries for OpenCvSharp | Provides the native OpenCV DLLs required at runtime by `OpenCvSharp4`. |
+
+### Test-only packages
+
+| Package | Version | Project(s) | Why it's used | How it's used in ApexAstro |
+|---|---:|---|---|---|
+| xunit | 2.4.2 | ApexAstro.Tests | Unit testing framework | Provides test attributes/assertions and test execution model. |
+| xunit.runner.visualstudio | 2.4.5 | ApexAstro.Tests | Visual Studio/VS Code test runner integration | Allows IDE-integrated test discovery and execution for xUnit tests. |
+| Moq | 4.20.72 | ApexAstro.Tests | Mocking framework | Used to isolate units under test by mocking service and dependency behavior. |
+| coverlet.collector | 6.0.0 | ApexAstro.Tests | Code coverage data collection | Collects coverage metrics during test runs. |
+
+Notes:
+
+- `compute-snr` has no direct third-party package references; it consumes ApexAstro.Core.
+- Standard Microsoft/System components are intentionally excluded from this list.
+- Package versions listed are from the current project files.
+
+---
+
 ## Installation
 
 ### System Requirements
@@ -151,6 +182,29 @@ dotnet build --configuration Release
 # Watch for changes and auto-rebuild
 dotnet watch --project ApexAstro.Wpf
 ```
+
+### compute-snr CLI
+
+This repository includes a command-line utility named `compute-snr` for headless SNR computation.
+
+Build:
+
+```powershell
+dotnet build compute-snr/compute-snr.csproj -c Release
+```
+
+Run:
+
+```powershell
+dotnet run --project compute-snr/compute-snr.csproj -- --snr -d "D:\\Astro\\M31\\LIGHT"
+```
+
+Behavior:
+
+- Computes SNR for FITS files in the target folder.
+- Writes `.apexastro.snr.json` in the target folder.
+- Prints one summary line per filter with median SNR.
+
 ---
 
 ## Development Guide
@@ -328,6 +382,9 @@ To test the installer before pushing a release:
    ```powershell
    # Build the application
    dotnet publish ApexAstro.Wpf -c Release -r win-x64 --no-self-contained --output ./publish
+
+   # Build the compute-snr CLI into the same publish folder
+   dotnet publish compute-snr/compute-snr.csproj -c Release -r win-x64 --no-self-contained --output ./publish
    
    # Compile the installer (command line)
    "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss

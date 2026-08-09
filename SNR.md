@@ -1,129 +1,208 @@
-# ApexAstro SNR File Format
+# ApexAstro SNR JSON Format
 
-This document describes the structure of the per-folder SNR cache file:
+This document describes the SNR cache files written by ApexAstro and how to combine multiple nights of SNR into a single per-filter progress value.
 
-- `.apexastro.snr.json`
+## Files
 
-Use this file when you want to read SNR results and source-file validation metadata from another program.
+ApexAstro writes two JSON files in each light-frame folder:
 
-## Purpose
+- `.apexastro.snr.json` (detailed cache + source validation)
+- `.apexastro.snr-summary.json` (project/report summary)
 
-`.apexastro.snr.json` stores:
+## Method Summary (Current Code)
 
-- When SNR was computed
-- Which folder the results belong to
-- Per-filter SNR statistics
-- Per-filter source file metadata used to validate cache freshness
+ApexAstro currently computes temporal SNR using a Gemini-style approach:
 
-## Top-level JSON structure
+1. Group frames by filter.
+2. Optionally align frames to a reference frame (ECC registration).
+3. Compute per-pixel temporal SNR from aligned frames (no MAD rejection in this main pass).
+4. Split target/background using reference-image segmentation (Otsu with fallback).
+5. Use Gemini signal SNR directly for planning/display values.
 
-```json
-{
-  "schemaVersion": 2,
-  "computedUtc": "2026-08-07T02:31:55.1234567Z",
-  "folderPath": "C:\\Data\\M31\\LIGHT",
-  "filters": [
-    {
-      "filterName": "L",
-      "width": 6248,
-      "height": 4176,
-      "frameCount": 42,
-      "integrationMinutes": 42.0,
-      "referenceFile": "C:\\Data\\M31\\LIGHT\\2026-03-27_06-38-15_L_..._0755.fits",
-      "meanTemporalSnr": 38.42,
-      "medianTemporalSnr": 37.95,
-      "standardDeviationTemporalSnr": 4.73,
-      "sourceFiles": [
-        {
-          "fileName": "2026-03-27_06-38-15_L_..._0755.fits",
-          "lastWriteUtc": "2026-03-27T13:38:16.0000000Z",
-          "fileSizeBytes": 103234560,
-          "width": 6248,
-          "height": 4176,
-          "bitpix": 16,
-          "hfr": 1.9
-        }
-      ]
-    }
-  ]
-}
-```
+SignalSNR is `targetMedianTemporalSnr` when available, otherwise `meanTemporalSnr`.
 
-## Field reference
+For compatibility with existing JSON/UI wiring, this value is currently stored in `stackEquivalentSnr` and shown in the SNR column.
+
+## `.apexastro.snr.json` Structure
 
 ### Root object
 
 - `schemaVersion` (integer)
-  - Current value is `2`.
-- `computedUtc` (string, ISO-8601 UTC timestamp)
-  - Time when SNR was computed.
+  - Current value: `2`
+- `computedUtc` (string, ISO-8601 UTC)
 - `folderPath` (string)
-  - Absolute folder path this cache applies to.
 - `filters` (array of filter objects)
-  - One entry per filter (for example `L`, `R`, `G`, `B`, `HA`).
 
 ### Filter object (`filters[]`)
 
 - `filterName` (string)
-  - Filter identifier.
 - `width` (integer)
-  - Frame width in pixels.
 - `height` (integer)
-  - Frame height in pixels.
 - `frameCount` (integer)
-  - Number of frames included for this filter.
 - `integrationMinutes` (number or null)
-  - Total integration time in minutes for this filter.
-  - Nullable when exposure could not be determined.
 - `referenceFile` (string)
-  - Full path of the frame used as the registration reference.
 - `meanTemporalSnr` (number)
-  - Mean SNR value across sampled valid pixels.
 - `medianTemporalSnr` (number)
-  - Median SNR value across sampled valid pixels.
+- `stackEquivalentSnr` (number or null)
+  - Gemini signal SNR used by planning/progress UI (compatibility field name)
+- `targetMedianTemporalSnr` (number or null)
+- `backgroundMedianTemporalSnr` (number or null)
 - `standardDeviationTemporalSnr` (number)
-  - Standard deviation of SNR across sampled valid pixels.
 - `sourceFiles` (array of source-file objects)
-  - Metadata used to validate whether the cache is still current.
 
 ### Source file object (`filters[].sourceFiles[]`)
 
 - `fileName` (string)
-  - File name only (no directory).
-- `lastWriteUtc` (string, ISO-8601 UTC timestamp)
-  - File timestamp at compute time.
+- `lastWriteUtc` (string, ISO-8601 UTC)
 - `fileSizeBytes` (integer)
-  - File size at compute time.
 - `width` (integer)
-  - Image width from file metadata.
 - `height` (integer)
-  - Image height from file metadata.
 - `bitpix` (integer)
-  - FITS BITPIX value.
 - `hfr` (number or null)
-  - Parsed HFR value when available.
 
-## How ApexAstro uses this file
+## `.apexastro.snr-summary.json` Structure
 
-ApexAstro considers SNR cache data valid only when the current image files match the cached `sourceFiles` set and metadata:
+### Root object
 
-- Same file count
+- `schemaVersion` (integer)
+  - Current value: `2`
+- `computedUtc` (string, ISO-8601 UTC)
+- `folderPath` (string)
+- `filterSummaries` (array)
+- `frameSummaries` (array)
+
+### Filter summary object (`filterSummaries[]`)
+
+- `filterName` (string)
+- `frameCount` (integer)
+- `integrationMinutes` (number or null)
+- `medianTemporalSnr` (number)
+- `stackEquivalentSnr` (number or null)
+- `targetMedianTemporalSnr` (number or null)
+- `backgroundMedianTemporalSnr` (number or null)
+- `meanTemporalSnr` (number)
+- `standardDeviationTemporalSnr` (number)
+- `coefficientOfVariation` (number)
+
+### Frame summary object (`frameSummaries[]`)
+
+- `fileName` (string)
+- `filterName` (string)
+- `frameSnr` (number)
+- `grade` (string)
+- `keep` (boolean)
+- `rank` (integer)
+- `frameCountInFilter` (integer)
+
+## Cache Validation Rules
+
+ApexAstro treats `.apexastro.snr.json` as valid only when current files match cached `sourceFiles`:
+
+- Same total file count
 - Same file names
 - Same file sizes
-- Same last-write timestamps (within small tolerance)
+- Same last-write timestamps (small tolerance)
 
-If validation fails, the cache is treated as out-of-date and SNR should be recomputed.
+If validation fails, SNR is recomputed.
 
-## Compatibility notes
+## Compatibility
 
-- Current filename: `.apexastro.snr.json`
-- Legacy filename still seen in older data: `.apexastro.temporal-snr.json`
-- `schemaVersion` should be checked before parsing.
+- Current cache filename: `.apexastro.snr.json`
+- Legacy cache filename: `.apexastro.temporal-snr.json`
+- Current summary filename: `.apexastro.snr-summary.json`
+- Legacy summary fallback path may use `.apexastro.snr.json` in older layouts
 
-## Related file
+---
 
-ApexAstro also writes a summary file intended for project-level reporting:
+## Tool Section: Multi-Night Aggregate SNR
 
-- `.apexastro.snr-summary.json`
+This section is intended for external automation that combines many nightly JSON files (for example 10 nights) to estimate progress toward SNR goals.
 
-That file contains filter summary rows and per-frame SNR ranking data.
+This aggregate is a planning estimate designed to answer: "How close am I to my capture target for each filter?"
+
+### Inputs
+
+- One or more nightly `.apexastro.snr.json` files
+- Optional goal SNR values, typically: 30, 60, 90
+
+### Per-night per-filter signal selection
+
+For each folder/filter row, compute `nightSignalSnr` as:
+
+1. If `targetMedianTemporalSnr` is finite and > 0, use it.
+2. Else if `meanTemporalSnr` is finite and > 0, use it.
+3. Else skip this night/filter row.
+
+Then compute `nightEffectiveSnr` as:
+
+1. If `stackEquivalentSnr` is finite and > 0, use it directly.
+2. Else use `nightSignalSnr`.
+
+### Aggregate across nights (per filter)
+
+For each filter name (L, R, G, B, HA, etc.), combine independent folder contributions in quadrature:
+
+$$
+	ext{aggregateSnr} = \sqrt{\sum_{i=1}^{k} \left(\text{nightEffectiveSnr}_i\right)^2}
+$$
+
+Also compute total integration:
+
+$$
+\text{aggregateIntegrationMinutes} = \sum_{i=1}^{k} \text{integrationMinutes}_i
+$$
+
+(use only finite, positive integration values)
+
+### Progress to goal
+
+For each goal SNR $G$:
+
+$$
+	ext{progressRatio} = \frac{\text{aggregateSnr}}{G}
+$$
+
+$$
+\text{progressPercent} = 100 \cdot \text{progressRatio}
+$$
+
+Clamp display percent to [0, 100+] depending on UI preference.
+
+### Additional integration estimate to goal
+
+If current aggregate SNR and integration are both finite and positive:
+
+$$
+	ext{requiredMinutesAtGoal} = \text{aggregateIntegrationMinutes} \cdot \left(\frac{G}{\text{aggregateSnr}}\right)^2
+$$
+
+$$
+\text{additionalMinutes} = \max\left(0,\ \text{requiredMinutesAtGoal} - \text{aggregateIntegrationMinutes}\right)
+$$
+
+If aggregate SNR is missing or non-positive, return `additionalMinutes = null`.
+
+### Recommended output object (per filter)
+
+```json
+{
+  "filterName": "L",
+  "nightCountUsed": 8,
+  "aggregateSnr": 74.36,
+  "aggregateIntegrationMinutes": 512.0,
+  "goals": {
+    "30": { "progressPercent": 100.0, "additionalMinutes": 0.0 },
+    "60": { "progressPercent": 100.0, "additionalMinutes": 0.0 },
+    "90": { "progressPercent": 82.62, "additionalMinutes": 238.7 }
+  }
+}
+```
+
+### Notes for robust tooling
+
+- Match filters case-insensitively and normalize names (`Ha` -> `HA`).
+- Reject rows where `frameCount <= 0`.
+- Ignore NaN/Infinity values.
+- Prefer reading from `.apexastro.snr.json` for per-night combine logic.
+- Use `.apexastro.snr-summary.json` for reporting and frame ranking workflows.
+- When the same folder is processed multiple times, keep only the newest entry by `computedUtc`.

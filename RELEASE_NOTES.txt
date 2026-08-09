@@ -1,5 +1,11 @@
 ApexAstro Release Notes
 
+v1.10.0
+* Added (experimental) SNR analysis to help predict how much data is required to reach
+the quality target for a project.
+* Minor bug fixes
+* UI tweaks based on user feedback
+
 v1.9.0
 * Added better support for ASIAIR images
 * Prompt the user for ASIAIR file format or N.I.N.A. file format on first launch

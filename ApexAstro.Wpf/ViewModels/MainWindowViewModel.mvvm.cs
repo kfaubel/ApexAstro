@@ -1085,10 +1085,6 @@ namespace ApexAstro.Wpf.ViewModels
                     ? files.OrderBy(f => f.Mean ?? double.MaxValue).ToList()
                     : files.OrderByDescending(f => f.Mean ?? double.MinValue).ToList(),
 
-                "Frame SNR" => direction == ListSortDirection.Ascending
-                    ? files.OrderBy(f => f.PerFrameSnr ?? double.MaxValue).ToList()
-                    : files.OrderByDescending(f => f.PerFrameSnr ?? double.MinValue).ToList(),
-                    
                 "Mark" => direction == ListSortDirection.Ascending 
                     ? files.OrderBy(f => f.IsSelected).ToList()
                     : files.OrderByDescending(f => f.IsSelected).ToList(),
@@ -1627,9 +1623,6 @@ namespace ApexAstro.Wpf.ViewModels
                 _appConfig.ShowFilenameTimeColumn,
                 _appConfig.ShowFilenameFrameColumn,
                 _appConfig.ShowMedianColumn,
-                _appConfig.ShowPerFrameSnrColumn,
-                _appConfig.PerFrameSnrColorThreshold,
-                _appConfig.PerFrameSnrYellowThreshold,
                 _appConfig.Theme, 
                 _appConfig.ShowFullScreenHelp,
                 _appConfig.PlayPauseInterval,
@@ -1662,21 +1655,6 @@ namespace ApexAstro.Wpf.ViewModels
                     }
                 }
 
-                if (result.showPerFrameSnrColumn.HasValue)
-                {
-                    _appConfig.ShowPerFrameSnrColumn = result.showPerFrameSnrColumn.Value;
-                }
-
-                if (result.perFrameSnrColorThreshold.HasValue)
-                {
-                    _appConfig.PerFrameSnrColorThreshold = result.perFrameSnrColorThreshold.Value;
-                }
-
-                if (result.perFrameSnrYellowThreshold.HasValue)
-                {
-                    _appConfig.PerFrameSnrYellowThreshold = result.perFrameSnrYellowThreshold.Value;
-                }
-                
                 if (result.theme.HasValue)
                 {
                     _appConfig.Theme = result.theme.Value;

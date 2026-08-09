@@ -78,49 +78,26 @@ The Auto Select Dialog allows you to automatically select images based on specif
 Clicking the graph icon in the toolbar will display a plot of the metadata values for all of the images in the current folder. This allows for quick visual analysis of trends and outliers in the dataset.
 
 ## SNR Display
-The SNR (Signal-to-Noise Ratio) tools estimate data quality in two ways:
-- **Overall SNR by filter** (L, R, G, B, Ha, etc.)
-- **Per-image (per-frame) SNR** for each file
+The SNR (Signal-to-Noise Ratio) tools estimate data quality for each filter in the current folder.
 
 ### Overall SNR (per filter)
-When you run Compute Temporal SNR, ApexAstro reports these values for each filter:
+When you run SNR analysis, ApexAstro computes an SNR value for each filter from the temporal behavior of pixel values across the frame set. The results are cached in a JSON file named `.apexastro.snr.json` in the folder being analyzed, which allows quick reloading without recomputation.
 
-- By default, ApexAstro computes the overall SNR estimate from a uniform sample of **10,000 pixels** per filter for faster results.
-- If a filter has fewer than 10,000 pixels, all pixels are used.
+The SNR is an approximation of target signal quality for each filter and is intended to be comparable to common planning thresholds (about 30 is acceptable, 60 is good, and 90 is excellent).  The `SNR.md` file (on GitHub) contains more details on SNR computation, cache structure, and multi-night aggregation guidance for external tools.
 
-- **Median**: the middle SNR value of all valid sampled pixels in that filter's SNR map
-- **Mean**: the average SNR value of all valid sampled pixels
-- **StdDev (SD)**: how spread out the SNR values are
-- **CV (Coefficient of Variation)**: SD / Mean
+The SNR calculation takes a few minutes depending on how many frames are in the folder and the PC being used.  RAM is the most important factor impacting performance.
 
-How to interpret them:
-- **Higher Median/Mean** generally means cleaner data (more signal relative to noise)
-- **Lower SD** means the quality is more consistent across the frame
-- **Lower CV** means more uniform/efficient integration quality
+### Processing Steps
+- Load and validate the frames - ensure they are all the same size and bit depth.
+- Choose a reference frame for alignment (Lowest HFR or the first frame is used by default)
+- Align all frames to the reference frame using OpenCV's ECC algorithm.
+- Select sample pixels for SNR computation (10,000 pixels per filter by default)
+- Compute the pixel-wise temporal SNR map for each filter from frame-to-frame statistics.
+- Split SNR values into target and background using Otsu thresholding (with percentile fallback if needed).
+- Compute per-filter summary values (mean, median, target/background medians) and cache the results.
 
-CV guidance used by ApexAstro:
-- **Green (< 0.15)**: generally strong/consistent data
-- **Yellow (0.15 to < 0.30)**: usable but more data can help
-- **Red (>= 0.30)**: noisy or inconsistent; additional data is usually recommended
 
-### Per-image (per-frame) SNR
-If enabled in **Options -> Per-frame SNR**, each frame gets an SNR score shown in the file list.
 
-- Scores are shown with 2 decimals.
-- Color coding uses your configured **Green threshold** and **Yellow threshold** in Options.
-- ApexAstro uses:
-	- **Green (great)**: SNR >= Green threshold
-	- **Yellow (good)**: SNR >= Yellow threshold and < Green threshold
-	- **Red (poor)**: SNR < Yellow threshold
-
-Example with Green threshold = 2.00 and Yellow threshold = 1.60:
-- **Great (Green)**: 2.00 and above
-- **Good (Yellow)**: 1.60 to 1.99
-- **Poor (Red)**: below 1.60
-
-Notes:
-- Per-frame SNR is best used to compare frames within the same session/filter/capture setup.
-- Absolute "good" or "great" values depend on sky conditions, gain, exposure, optical setup, and target.
 
 ## Histogram Panel
 A histogram panel can be shown below the image viewer via the Options menu. The histogram can be displayed in linear or logarithmic scale and automatically updates when you select different images. The histogram panel can be hidden to maximize the image viewing area.

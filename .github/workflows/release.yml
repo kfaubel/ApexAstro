@@ -24,8 +24,11 @@ jobs:
     - name: Build
       run: dotnet build --configuration Release --no-restore
       
-    - name: Publish
+    - name: Publish ApexAstro
       run: dotnet publish ApexAstro.Wpf -c Release -r win-x64 --no-self-contained --output ./publish
+
+    - name: Publish compute-snr
+      run: dotnet publish compute-snr/compute-snr.csproj -c Release -r win-x64 --no-self-contained --output ./publish
       
     - name: Create ZIP package
       run: |
@@ -56,6 +59,7 @@ jobs:
         Write-Host "Files to upload:"
         Get-Item ApexAstro-win-x64.zip | Format-List Name, Length
         Get-Item ApexAstro-Setup-$VERSION.exe | Format-List Name, Length
+        Get-Item publish\compute-snr.exe | Format-List Name, Length
         
     - name: Create Release
       env:
@@ -90,6 +94,12 @@ jobs:
         2. Extract all files to a folder of your choice
         3. Run ``ApexAstro.exe``
         4. Ensure .NET 8 Desktop Runtime is installed
+
+        ### Included CLI Tool
+
+        This release also includes ``compute-snr.exe`` for command-line SNR computation:
+
+        ``compute-snr.exe --snr -d <path-to-directory-with-fits-files>``
         
         ### What's New
         

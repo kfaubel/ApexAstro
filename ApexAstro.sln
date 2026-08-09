@@ -1,4 +1,4 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.4.33026.260
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -9,6 +9,8 @@ EndProject
 Project("{60dc8134-eba5-43b8-bcc9-bb4bc16c2548}") = "ApexAstro.Wpf", "ApexAstro.Wpf\ApexAstro.Wpf.csproj", "{C3D7A2F3-0B8C-4C3C-9D3F-6E5C3A2B2E6F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApexAstro.Tests", "ApexAstro.Tests\ApexAstro.Tests.csproj", "{36B338EE-B0EB-4FAD-A862-26BB2E8381F3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "compute-snr", "compute-snr\compute-snr.csproj", "{5809A9A8-1031-4F04-89C8-84F67CE1D268}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -32,5 +34,9 @@ Global
 		{36B338EE-B0EB-4FAD-A862-26BB2E8381F3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{36B338EE-B0EB-4FAD-A862-26BB2E8381F3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{36B338EE-B0EB-4FAD-A862-26BB2E8381F3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5809A9A8-1031-4F04-89C8-84F67CE1D268}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5809A9A8-1031-4F04-89C8-84F67CE1D268}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5809A9A8-1031-4F04-89C8-84F67CE1D268}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5809A9A8-1031-4F04-89C8-84F67CE1D268}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

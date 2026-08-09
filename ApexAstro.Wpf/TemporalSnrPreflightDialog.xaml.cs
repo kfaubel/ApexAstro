@@ -18,6 +18,8 @@ namespace ApexAstro.Wpf
         private bool _useFullMachine;
         private bool _saveIntermediateData;
         private bool _stopOnMismatch;
+        private int _samplePixelCount = 10000;
+        private string _samplePixelCountText = "10000";
 
         public TemporalSnrPreflightDialog(TemporalSnrPreflightPlan plan, TemporalSnrCacheManifest? currentCacheManifest = null, string? folderPath = null)
         {
@@ -37,19 +39,31 @@ namespace ApexAstro.Wpf
                 string sourceFolder = !string.IsNullOrWhiteSpace(folderPath)
                     ? folderPath
                     : currentCacheManifest.FolderPath;
+                string snrContextLabel = BuildSnrContextLabel(sourceFolder);
 
                 foreach (var filter in currentCacheManifest.Filters.OrderBy(f => f.FilterName, StringComparer.OrdinalIgnoreCase))
                 {
                     double? integrationMinutes = ComputeIntegrationMinutes(filter, sourceFolder);
+                    double planningSnr = ResolvePlanningSnr(filter.StackEquivalentSnr, filter.MedianTemporalSnr, filter.TargetMedianTemporalSnr);
+                    string planningSnrSource = IsFinitePositive(filter.StackEquivalentSnr)
+                        ? "Gemini signal"
+                        : IsFinitePositive(filter.TargetMedianTemporalSnr)
+                            ? "Target"
+                            : "Median (fallback)";
                     CurrentResults.Add(new TemporalSnrFilterSummary
                     {
                         FilterName = filter.FilterName,
                         MedianTemporalSnr = filter.MedianTemporalSnr,
+                        TargetMedianTemporalSnr = filter.TargetMedianTemporalSnr,
+                        BackgroundMedianTemporalSnr = filter.BackgroundMedianTemporalSnr,
+                        StackEquivalentSnr = filter.StackEquivalentSnr,
                         FrameCount = filter.FrameCount,
+                        SnrContextLabel = snrContextLabel,
+                        PlanningSnrSource = planningSnrSource,
                         IntegrationMinutes = integrationMinutes,
-                        AdditionalMinutesTo30 = ComputeAdditionalMinutesForTargetSnr(filter.MedianTemporalSnr, integrationMinutes, 30.0),
-                        AdditionalMinutesTo60 = ComputeAdditionalMinutesForTargetSnr(filter.MedianTemporalSnr, integrationMinutes, 60.0),
-                        AdditionalMinutesTo90 = ComputeAdditionalMinutesForTargetSnr(filter.MedianTemporalSnr, integrationMinutes, 90.0)
+                        AdditionalMinutesTo30 = ComputeAdditionalMinutesForTargetSnr(planningSnr, integrationMinutes, 30.0),
+                        AdditionalMinutesTo60 = ComputeAdditionalMinutesForTargetSnr(planningSnr, integrationMinutes, 60.0),
+                        AdditionalMinutesTo90 = ComputeAdditionalMinutesForTargetSnr(planningSnr, integrationMinutes, 90.0)
                     });
                 }
             }
@@ -117,10 +131,59 @@ namespace ApexAstro.Wpf
 
         public TemporalSnrPreflightPlan Plan => _plan;
 
+        public int SamplePixelCount
+        {
+            get => _samplePixelCount;
+            private set
+            {
+                int sanitized = SanitizeSamplePixelCount(value);
+                if (_samplePixelCount != sanitized)
+                {
+                    _samplePixelCount = sanitized;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string SamplePixelCountText
+        {
+            get => _samplePixelCountText;
+            set
+            {
+                if (_samplePixelCountText != value)
+                {
+                    _samplePixelCountText = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public void SetInitialSamplePixelCount(int samplePixelCount)
+        {
+            SamplePixelCount = samplePixelCount;
+            SamplePixelCountText = SamplePixelCount.ToString(CultureInfo.InvariantCulture);
+        }
+
         private void StartCompute_Click(object sender, RoutedEventArgs e)
         {
+            if (!int.TryParse(SamplePixelCountText, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsedSampleCount) || parsedSampleCount <= 0)
+            {
+                System.Windows.MessageBox.Show("Sample pixels per filter must be a positive whole number.", "Invalid SNR Option", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            SamplePixelCount = parsedSampleCount;
+            SamplePixelCountText = SamplePixelCount.ToString(CultureInfo.InvariantCulture);
+
             DialogResult = true;
             Close();
+        }
+
+        private static int SanitizeSamplePixelCount(int value)
+        {
+            const int minSampleCount = 1000;
+            const int maxSampleCount = 200000;
+            return Math.Clamp(value, minSampleCount, maxSampleCount);
         }
 
         private static string FormatSpan(TimeSpan span)
@@ -134,6 +197,15 @@ namespace ApexAstro.Wpf
                 return "unknown";
 
             return $"{bytes / 1024.0 / 1024.0 / 1024.0:0.#} GB";
+        }
+
+        private static string BuildSnrContextLabel(string? folderPath)
+        {
+            if (string.IsNullOrWhiteSpace(folderPath))
+                return "Current folder";
+
+            string name = Path.GetFileName(folderPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            return string.IsNullOrWhiteSpace(name) ? "Current folder" : name;
         }
 
         private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
@@ -279,6 +351,22 @@ namespace ApexAstro.Wpf
             double requiredTotalMinutes = integrationMinutes.Value * scale * scale;
             double additionalMinutes = requiredTotalMinutes - integrationMinutes.Value;
             return Math.Max(0.0, additionalMinutes);
+        }
+
+        private static double ResolvePlanningSnr(double? stackEquivalentSnr, double medianTemporalSnr, double? targetMedianTemporalSnr)
+        {
+            if (IsFinitePositive(stackEquivalentSnr))
+                return stackEquivalentSnr!.Value;
+
+            if (IsFinitePositive(targetMedianTemporalSnr))
+                return targetMedianTemporalSnr!.Value;
+
+            return medianTemporalSnr;
+        }
+
+        private static bool IsFinitePositive(double? value)
+        {
+            return value.HasValue && double.IsFinite(value.Value) && value.Value > 0;
         }
     }
 }

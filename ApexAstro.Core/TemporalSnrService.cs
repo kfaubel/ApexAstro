@@ -77,6 +77,9 @@ namespace ApexAstro.Core
         public required int[] RejectedSampleCountMap { get; init; }
         public required double MeanTemporalSnr { get; init; }
         public required double MedianTemporalSnr { get; init; }
+        public double? StackEquivalentSnr { get; init; }
+        public double? TargetMedianTemporalSnr { get; init; }
+        public double? BackgroundMedianTemporalSnr { get; init; }
         public required double StandardDeviationTemporalSnr { get; init; }
     }
 
@@ -131,24 +134,24 @@ namespace ApexAstro.Core
                 StageCount = 5,
                 PercentComplete = 0.05,
                 OverallPercentComplete = ValidateProgress,
-                Message = "Loading and validating source frames"
+                Message = "Reading headers and grouping source frames"
             });
 
-            var frames = new List<FrameData>(files.Length);
+            var frameDescriptors = new List<FrameDescriptor>(files.Length);
             foreach (string file in files)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                byte[] buffer = File.ReadAllBytes(file);
-                var (width, height, pixels, header) = FitsParser.ReadImageAsFloat(buffer);
-
-                int bitpix = header.TryGetValue("BITPIX", out var bitpixObj) ? Convert.ToInt32(bitpixObj) : 0;
+                Dictionary<string, object> header = FitsParser.ParseHeaderFromFile(file);
+                int bitpix = TryGetIntHeaderValue(header, "BITPIX");
+                int width = TryGetIntHeaderValue(header, "NAXIS1");
+                int height = TryGetIntHeaderValue(header, "NAXIS2");
                 string filter = ResolveFilterName(file, header);
                 double? hfr = ParseHfrFromFilename(Path.GetFileName(file));
 
-                frames.Add(new FrameData(file, filter, width, height, bitpix, hfr, pixels));
+                frameDescriptors.Add(new FrameDescriptor(file, filter, width, height, bitpix, hfr));
             }
 
-            var grouped = frames.GroupBy(f => f.FilterName, StringComparer.OrdinalIgnoreCase)
+            var grouped = frameDescriptors.GroupBy(f => f.FilterName, StringComparer.OrdinalIgnoreCase)
                 .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
@@ -175,7 +178,25 @@ namespace ApexAstro.Core
                     FilterName = group.Key
                 });
 
-                var (filterResult, perFrameResults) = ComputeForFilterGroup(group.Key, group.ToList(), options, threadCount, cancellationToken, progress, stageIndex, stageCount, filterIndex, grouped.Count);
+                var frames = new List<FrameData>(group.Count());
+                foreach (FrameDescriptor descriptor in group)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    byte[] buffer = File.ReadAllBytes(descriptor.Path);
+                    var (width, height, pixels, header) = FitsParser.ReadImageAsFloat(buffer);
+                    int bitpix = header.TryGetValue("BITPIX", out var bitpixObj) ? Convert.ToInt32(bitpixObj) : descriptor.Bitpix;
+
+                    frames.Add(new FrameData(
+                        descriptor.Path,
+                        group.Key,
+                        width,
+                        height,
+                        bitpix,
+                        descriptor.Hfr,
+                        pixels));
+                }
+
+                var (filterResult, perFrameResults) = ComputeForFilterGroup(group.Key, frames, options, threadCount, cancellationToken, progress, stageIndex, stageCount, filterIndex, grouped.Count);
                 results[group.Key] = filterResult;
                 if (options.ComputePerFrameSnr)
                     frameResults.AddRange(perFrameResults);
@@ -265,14 +286,18 @@ namespace ApexAstro.Core
             });
 
             var workingSet = alignedFrames.ToList();
+            var frameOffsets = workingSet.Select(ComputeFrameBackgroundOffset).ToArray();
+
+            var geminiOffsets = new double[workingSet.Count];
 
             (float[] snrMap, int[] rejectedMap) = ComputeSnrMaps(
                 workingSet,
+                geminiOffsets,
                 baseline.Width,
                 baseline.Height,
                 options.SamplePixelCount,
                 options.MinSamples,
-                options.MadSigmaThreshold,
+                double.PositiveInfinity,
                 threadCount,
                 cancellationToken,
                 progress,
@@ -282,8 +307,115 @@ namespace ApexAstro.Core
                 filterIndex,
                 filterCount);
 
-            double meanSnr = 0.0;
+            var geminiStats = ComputeSnrStatistics(snrMap);
+            int pixelCount = baseline.Width * baseline.Height;
+            bool useSampling = options.SamplePixelCount > 0 && options.SamplePixelCount < pixelCount;
+            int[]? splitIndices = useSampling
+                ? BuildUniformSampleIndices(pixelCount, options.SamplePixelCount)
+                : null;
+            var (geminiTargetMedianSnr, geminiBackgroundMedianSnr) = ComputeTargetBackgroundSnrMedians(
+                snrMap,
+                referencePixels,
+                splitIndices);
+
+            double geminiSignalSnr = IsFinitePositive(geminiTargetMedianSnr)
+                ? geminiTargetMedianSnr!.Value
+                : geminiStats.meanSnr;
+            double stackEquivalentSnr = geminiSignalSnr > 0
+                ? geminiSignalSnr
+                : 0.0;
+
+            var scoredFrames = ComputeFrameSnrScores(frames, workingSet, frameOffsets);
+
+            var filterResult = new TemporalSnrFilterResult
+            {
+                FilterName = filterName,
+                Width = baseline.Width,
+                Height = baseline.Height,
+                FrameCount = frames.Count,
+                ReferenceFile = referenceFrame.Path,
+                SourceFiles = frames
+                    .Select(frame => new TemporalSnrSourceValidation
+                    {
+                        FileName = Path.GetFileName(frame.Path),
+                        LastWriteUtc = File.GetLastWriteTimeUtc(frame.Path),
+                        FileSizeBytes = new FileInfo(frame.Path).Length,
+                        Width = frame.Width,
+                        Height = frame.Height,
+                        Bitpix = frame.Bitpix,
+                        Hfr = frame.Hfr
+                    })
+                    .ToList(),
+                TemporalSnrMap = snrMap,
+                RejectedSampleCountMap = rejectedMap,
+                MeanTemporalSnr = geminiStats.meanSnr,
+                MedianTemporalSnr = geminiStats.medianSnr,
+                StackEquivalentSnr = stackEquivalentSnr,
+                TargetMedianTemporalSnr = geminiTargetMedianSnr,
+                BackgroundMedianTemporalSnr = geminiBackgroundMedianSnr,
+                StandardDeviationTemporalSnr = geminiStats.stdDevSnr
+            };
+
+            var frameResults = options.ComputePerFrameSnr
+                ? ComputePerFrameScores(filterName, scoredFrames, options.KeepBestPercent)
+                : new List<TemporalSnrFrameResult>();
+
+            return (filterResult, frameResults);
+        }
+
+        private static List<(FrameData frame, double score)> ComputeFrameSnrScores(
+            List<FrameData> frames,
+            List<float[]> alignedFrames,
+            IReadOnlyList<double> frameOffsets)
+        {
+            const double epsilon = 1e-8;
+            var scoredFrames = new List<(FrameData frame, double score)>();
+
+            for (int i = 0; i < frames.Count; i++)
+            {
+                float[] pixels = alignedFrames[i];
+                double frameOffset = i < frameOffsets.Count ? frameOffsets[i] : 0.0;
+                int sampleCount = 0;
+                double mean = 0.0;
+                double m2 = 0.0;
+
+                for (int p = 0; p < pixels.Length; p++)
+                {
+                    float value = pixels[p];
+                    if (!float.IsFinite(value))
+                        continue;
+
+                    double adjusted = value - frameOffset;
+
+                    sampleCount++;
+                    double delta = adjusted - mean;
+                    mean += delta / sampleCount;
+                    double delta2 = adjusted - mean;
+                    m2 += delta * delta2;
+                }
+
+                double variance = sampleCount > 1 ? m2 / (sampleCount - 1) : 0.0;
+                double stdDev = Math.Sqrt(Math.Max(variance, 0.0));
+                double frameSnr = stdDev > epsilon ? mean / stdDev : 0.0;
+                if (!double.IsFinite(frameSnr) || frameSnr < 0)
+                    frameSnr = 0.0;
+
+                scoredFrames.Add((frames[i], frameSnr));
+            }
+
+            return scoredFrames;
+        }
+
+        private static (double meanSnr, double medianSnr, double stdDevSnr) ComputeSnrStatistics(float[] snrMap)
+        {
             double[] snrFinite = snrMap.Where(v => float.IsFinite(v) && v > 0).Select(v => (double)v).ToArray();
+            return ComputeSnrStatistics(snrFinite);
+        }
+
+        private static (double meanSnr, double medianSnr, double stdDevSnr) ComputeSnrStatistics(IEnumerable<double> snrValues)
+        {
+            double[] snrFinite = snrValues.Where(v => double.IsFinite(v) && v > 0).ToArray();
+            double meanSnr = 0.0;
             if (snrFinite.Length > 0)
             {
                 meanSnr = snrFinite.Average();
@@ -312,77 +444,28 @@ namespace ApexAstro.Core
                 stdDevSnr = Math.Sqrt(sumSquares / (snrFinite.Length - 1));
             }
 
-            var filterResult = new TemporalSnrFilterResult
+            return (meanSnr, medianSnr, stdDevSnr);
+        }
+
+        private static double ComputeStackEquivalentSnr(IEnumerable<double> frameSnrValues)
+        {
+            double sumSquares = 0.0;
+            foreach (double value in frameSnrValues)
             {
-                FilterName = filterName,
-                Width = baseline.Width,
-                Height = baseline.Height,
-                FrameCount = frames.Count,
-                ReferenceFile = referenceFrame.Path,
-                SourceFiles = frames
-                    .Select(frame => new TemporalSnrSourceValidation
-                    {
-                        FileName = Path.GetFileName(frame.Path),
-                        LastWriteUtc = File.GetLastWriteTimeUtc(frame.Path),
-                        FileSizeBytes = new FileInfo(frame.Path).Length,
-                        Width = frame.Width,
-                        Height = frame.Height,
-                        Bitpix = frame.Bitpix,
-                        Hfr = frame.Hfr
-                    })
-                    .ToList(),
-                TemporalSnrMap = snrMap,
-                RejectedSampleCountMap = rejectedMap,
-                MeanTemporalSnr = meanSnr,
-                MedianTemporalSnr = medianSnr,
-                StandardDeviationTemporalSnr = stdDevSnr
-            };
+                if (!double.IsFinite(value) || value <= 0)
+                    continue;
 
-            var frameResults = options.ComputePerFrameSnr
-                ? ComputePerFrameScores(filterName, frames, workingSet, options.KeepBestPercent)
-                : new List<TemporalSnrFrameResult>();
+                sumSquares += value * value;
+            }
 
-            return (filterResult, frameResults);
+            return Math.Sqrt(sumSquares);
         }
 
         private static List<TemporalSnrFrameResult> ComputePerFrameScores(
             string filterName,
-            List<FrameData> frames,
-            List<float[]> alignedFrames,
+            List<(FrameData frame, double score)> scoredFrames,
             double keepBestPercent)
         {
-            const double epsilon = 1e-8;
-            var scoredFrames = new List<(FrameData frame, double score)>();
-
-            for (int i = 0; i < frames.Count; i++)
-            {
-                float[] pixels = alignedFrames[i];
-                int sampleCount = 0;
-                double mean = 0.0;
-                double m2 = 0.0;
-
-                for (int p = 0; p < pixels.Length; p++)
-                {
-                    float value = pixels[p];
-                    if (!float.IsFinite(value))
-                        continue;
-
-                    sampleCount++;
-                    double delta = value - mean;
-                    mean += delta / sampleCount;
-                    double delta2 = value - mean;
-                    m2 += delta * delta2;
-                }
-
-                double variance = sampleCount > 1 ? m2 / (sampleCount - 1) : 0.0;
-                double stdDev = Math.Sqrt(Math.Max(variance, 0.0));
-                double frameSnr = stdDev > epsilon ? mean / stdDev : 0.0;
-                if (!double.IsFinite(frameSnr) || frameSnr < 0)
-                    frameSnr = 0.0;
-
-                scoredFrames.Add((frames[i], frameSnr));
-            }
-
             var sorted = scoredFrames
                 .OrderByDescending(entry => entry.score)
                 .ToList();
@@ -421,6 +504,7 @@ namespace ApexAstro.Core
 
         private static (float[] snrMap, int[] rejectedMap) ComputeSnrMaps(
             List<float[]> frames,
+            IReadOnlyList<double> frameOffsets,
             int width,
             int height,
             int samplePixelCount,
@@ -472,7 +556,8 @@ namespace ApexAstro.Core
                         float value = frames[frameIndex][pixelIndex];
                         if (float.IsFinite(value))
                         {
-                            buffers.Values[count++] = value;
+                            double frameOffset = frameIndex < frameOffsets.Count ? frameOffsets[frameIndex] : 0.0;
+                            buffers.Values[count++] = (float)(value - frameOffset);
                         }
                     }
 
@@ -491,7 +576,10 @@ namespace ApexAstro.Core
 
                     double mad = ComputeMedian(buffers.AbsDeviation, count);
                     double robustSigma = (1.4826 * mad) + epsilon;
-                    double threshold = madSigmaThreshold * robustSigma;
+                    // Guard against MAD collapsing to ~0 on quantized/low-noise pixels.
+                    // Keep a practical minimum threshold so natural variation is retained
+                    // while obvious outliers are still rejected.
+                    double threshold = Math.Max(madSigmaThreshold * robustSigma, 1.0);
 
                     int kept = 0;
                     int rejected = 0;
@@ -555,6 +643,225 @@ namespace ApexAstro.Core
             return (snrMap, rejectedMap);
         }
 
+        private static void ApplyFrameCountNormalization(float[] snrMap, int frameCount)
+        {
+            if (snrMap.Length == 0 || frameCount <= 0)
+                return;
+
+            double scale = Math.Sqrt(frameCount / 16.0);
+            if (!double.IsFinite(scale) || scale <= 0)
+                return;
+
+            for (int i = 0; i < snrMap.Length; i++)
+            {
+                float value = snrMap[i];
+                if (!float.IsFinite(value) || value <= 0f)
+                    continue;
+
+                snrMap[i] = (float)(value * scale);
+            }
+        }
+
+        private static (double? targetMedianSnr, double? backgroundMedianSnr) ComputeTargetBackgroundSnrMedians(
+            float[] snrMap,
+            float[] referencePixels,
+            IReadOnlyList<int>? pixelIndices = null)
+        {
+            if (snrMap.Length == 0 || referencePixels.Length != snrMap.Length)
+                return (null, null);
+
+            int estimatedCount = pixelIndices?.Count ?? snrMap.Length;
+            var intensity = new List<double>(Math.Max(estimatedCount, 32));
+            var snr = new List<double>(Math.Max(estimatedCount, 32));
+
+            if (pixelIndices != null)
+            {
+                for (int j = 0; j < pixelIndices.Count; j++)
+                {
+                    int i = pixelIndices[j];
+                    if ((uint)i >= (uint)snrMap.Length)
+                        continue;
+
+                    float snrValue = snrMap[i];
+                    float referenceValue = referencePixels[i];
+                    if (!float.IsFinite(snrValue) || !float.IsFinite(referenceValue))
+                        continue;
+
+                    intensity.Add(referenceValue);
+                    snr.Add(snrValue);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < snrMap.Length; i++)
+                {
+                    float snrValue = snrMap[i];
+                    float referenceValue = referencePixels[i];
+                    if (!float.IsFinite(snrValue) || !float.IsFinite(referenceValue))
+                        continue;
+
+                    intensity.Add(referenceValue);
+                    snr.Add(snrValue);
+                }
+            }
+
+            if (snr.Count < 32)
+                return (null, null);
+
+            double threshold = ComputeOtsuThreshold(intensity);
+            var split = SplitSnrByThreshold(intensity, snr, threshold);
+
+            // Fallback when Otsu is degenerate (very flat backgrounds, tiny targets, etc.).
+            if (!split.HasBothGroups)
+            {
+                double percentileThreshold = ComputePercentile(intensity, 70.0);
+                split = SplitSnrByThreshold(intensity, snr, percentileThreshold);
+            }
+
+            if (!split.HasBothGroups)
+                return (null, null);
+
+            return (ComputeMedian(split.Target), ComputeMedian(split.Background));
+        }
+
+        private static (List<double> Target, List<double> Background, bool HasBothGroups) SplitSnrByThreshold(
+            List<double> intensity,
+            List<double> snr,
+            double threshold)
+        {
+            var target = new List<double>();
+            var background = new List<double>();
+
+            for (int i = 0; i < intensity.Count; i++)
+            {
+                if (intensity[i] >= threshold)
+                    target.Add(snr[i]);
+                else
+                    background.Add(snr[i]);
+            }
+
+            const int minGroupSize = 8;
+            bool hasBothGroups = target.Count >= minGroupSize && background.Count >= minGroupSize;
+            return (target, background, hasBothGroups);
+        }
+
+        private static double ComputeOtsuThreshold(List<double> values)
+        {
+            if (values.Count == 0)
+                return 0.0;
+
+            double min = values.Min();
+            double max = values.Max();
+            if (!double.IsFinite(min) || !double.IsFinite(max) || max <= min)
+                return min;
+
+            const int bins = 256;
+            var histogram = new long[bins];
+            double scale = (bins - 1) / (max - min);
+
+            for (int i = 0; i < values.Count; i++)
+            {
+                int index = (int)Math.Round((values[i] - min) * scale);
+                index = Math.Clamp(index, 0, bins - 1);
+                histogram[index]++;
+            }
+
+            long total = values.Count;
+            double sum = 0.0;
+            for (int i = 0; i < bins; i++)
+            {
+                sum += i * histogram[i];
+            }
+
+            long weightBackground = 0;
+            double sumBackground = 0.0;
+            double maxBetweenClassVariance = double.MinValue;
+            int thresholdBin = bins / 2;
+
+            for (int i = 0; i < bins; i++)
+            {
+                weightBackground += histogram[i];
+                if (weightBackground == 0)
+                    continue;
+
+                long weightForeground = total - weightBackground;
+                if (weightForeground == 0)
+                    break;
+
+                sumBackground += i * histogram[i];
+                double meanBackground = sumBackground / weightBackground;
+                double meanForeground = (sum - sumBackground) / weightForeground;
+                double betweenClassVariance = weightBackground * weightForeground * Math.Pow(meanBackground - meanForeground, 2);
+
+                if (betweenClassVariance > maxBetweenClassVariance)
+                {
+                    maxBetweenClassVariance = betweenClassVariance;
+                    thresholdBin = i;
+                }
+            }
+
+            return min + (thresholdBin / scale);
+        }
+
+        private static double ComputePercentile(List<double> values, double percentile)
+        {
+            if (values.Count == 0)
+                return 0.0;
+
+            var sorted = values.ToArray();
+            Array.Sort(sorted);
+
+            double p = Math.Clamp(percentile, 0.0, 100.0) / 100.0;
+            double position = (sorted.Length - 1) * p;
+            int lower = (int)Math.Floor(position);
+            int upper = (int)Math.Ceiling(position);
+
+            if (lower == upper)
+                return sorted[lower];
+
+            double fraction = position - lower;
+            return sorted[lower] + ((sorted[upper] - sorted[lower]) * fraction);
+        }
+
+        private static double ComputeMedian(List<double> values)
+        {
+            if (values.Count == 0)
+                return 0.0;
+
+            var sorted = values.ToArray();
+            Array.Sort(sorted);
+            int mid = sorted.Length / 2;
+            if ((sorted.Length & 1) == 0)
+            {
+                return (sorted[mid - 1] + sorted[mid]) / 2.0;
+            }
+
+            return sorted[mid];
+        }
+
+        private static double ComputeFrameBackgroundOffset(float[] pixels)
+        {
+            int finiteCount = 0;
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                if (float.IsFinite(pixels[i]))
+                    finiteCount++;
+            }
+
+            if (finiteCount == 0)
+                return 0.0;
+
+            var values = new float[finiteCount];
+            int index = 0;
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                if (float.IsFinite(pixels[i]))
+                    values[index++] = pixels[i];
+            }
+
+            return ComputeMedian(values, finiteCount);
+        }
+
         private static int[] BuildUniformSampleIndices(int pixelCount, int sampleCount)
         {
             int clampedCount = Math.Clamp(sampleCount, 1, pixelCount);
@@ -611,6 +918,26 @@ namespace ApexAstro.Core
 
             double filterSlice = (filterIndex + Math.Clamp(currentFilterProgress, 0.0, 1.0)) / filterCount;
             return Math.Clamp(ValidateProgress + (filterSlice * ComputeStageSpan), ValidateProgress, SaveProgress);
+        }
+
+        private static bool IsFinitePositive(double? value)
+        {
+            return value.HasValue && double.IsFinite(value.Value) && value.Value > 0;
+        }
+
+        private static int TryGetIntHeaderValue(Dictionary<string, object> header, string key)
+        {
+            if (!header.TryGetValue(key, out var value) || value == null)
+                return 0;
+
+            try
+            {
+                return Convert.ToInt32(value, CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                return 0;
+            }
         }
 
         private static double ComputeMedian(float[] values, int count)
@@ -824,6 +1151,26 @@ namespace ApexAstro.Core
             public int Bitpix { get; }
             public double? Hfr { get; }
             public float[] Pixels { get; }
+        }
+
+        private sealed class FrameDescriptor
+        {
+            public FrameDescriptor(string path, string filterName, int width, int height, int bitpix, double? hfr)
+            {
+                Path = path;
+                FilterName = filterName;
+                Width = width;
+                Height = height;
+                Bitpix = bitpix;
+                Hfr = hfr;
+            }
+
+            public string Path { get; }
+            public string FilterName { get; }
+            public int Width { get; }
+            public int Height { get; }
+            public int Bitpix { get; }
+            public double? Hfr { get; }
         }
     }
 }

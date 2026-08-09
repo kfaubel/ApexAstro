@@ -19,6 +19,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <TextBlock Text="{Binding StatusText}"
@@ -28,13 +29,20 @@
                    Margin="0,0,0,8"/>
 
         <TextBlock Grid.Row="1"
+                   Text="EXPERIMENTAL"
+                   FontSize="24"
+                   FontWeight="Bold"
+                   Foreground="#FF4D4D"
+                   Margin="0,0,0,10"/>
+
+        <TextBlock Grid.Row="2"
                    Text="{Binding ResultText}"
                    Visibility="{Binding HasResultText, Converter={StaticResource BooleanToVisibilityConverter}}"
                    FontSize="12"
                    TextWrapping="Wrap"
                    Margin="0,0,0,10"/>
 
-        <Border Grid.Row="2"
+        <Border Grid.Row="3"
             Visibility="{Binding HasFilterSummaries, Converter={StaticResource BooleanToVisibilityConverter}}"
                 Background="{DynamicResource ThemeSidebarBackground}"
                 BorderBrush="{DynamicResource ThemeBorderBrush}"
@@ -95,28 +103,21 @@
                                 <TextBlock Text="{Binding FilterName}" Grid.Column="0"/>
                                 <TextBlock Text="{Binding FrameCount}" Grid.Column="1" TextAlignment="Right"/>
                                 <TextBlock Text="{Binding IntegrationMinutesDisplay}" Grid.Column="2" TextAlignment="Right"/>
-                                <TextBlock Text="{Binding MedianTemporalSnr, StringFormat={}{0:F0}}" Grid.Column="3" TextAlignment="Right" Margin="0,0,12,0"/>
-                                <TextBlock Text="{Binding AdditionalTo30Display}" Grid.Column="4" TextAlignment="Center"/>
-                                <TextBlock Text="{Binding AdditionalTo60Display}" Grid.Column="5" TextAlignment="Center"/>
-                                <TextBlock Text="{Binding AdditionalTo90Display}" Grid.Column="6" TextAlignment="Center"/>
+                                <Grid Grid.Column="3" Margin="0,0,12,0">
+                                    <TextBlock Text="{Binding StackEquivalentSnrDisplay, Mode=OneWay}"
+                                               ToolTip="{Binding StackEquivalentSnrTooltip}"
+                                               TextAlignment="Right"
+                                               HorizontalAlignment="Right"/>
+                                </Grid>
+                                <TextBlock Text="{Binding AdditionalTo30Display}" ToolTip="{Binding AdditionalTimeTooltip}" Grid.Column="4" TextAlignment="Center"/>
+                                <TextBlock Text="{Binding AdditionalTo60Display}" ToolTip="{Binding AdditionalTimeTooltip}" Grid.Column="5" TextAlignment="Center"/>
+                                <TextBlock Text="{Binding AdditionalTo90Display}" ToolTip="{Binding AdditionalTimeTooltip}" Grid.Column="6" TextAlignment="Center"/>
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </StackPanel>
         </Border>
-
-        <StackPanel Grid.Row="3" Margin="0,0,0,8">
-            <TextBlock Text="Overall progress"
-                       FontWeight="SemiBold"
-                       Margin="0,0,0,3"/>
-            <ProgressBar Height="20"
-                         Minimum="0"
-                         Maximum="100"
-                         Value="{Binding TotalProgressValue, Mode=OneWay}"
-                         Margin="0,0,0,3"/>
-            <TextBlock Text="{Binding PercentText}"/>
-        </StackPanel>
 
         <StackPanel Grid.Row="4" Margin="0,0,0,8">
             <TextBlock Text="{Binding CurrentFilterText}"
@@ -130,12 +131,24 @@
             <TextBlock Text="{Binding FilterPercentText}"/>
         </StackPanel>
 
-        <DockPanel Grid.Row="5" Margin="0,0,0,10">
+        <StackPanel Grid.Row="5" Margin="0,0,0,8">
+            <TextBlock Text="Overall progress"
+                       FontWeight="SemiBold"
+                       Margin="0,0,0,3"/>
+            <ProgressBar Height="20"
+                         Minimum="0"
+                         Maximum="100"
+                         Value="{Binding TotalProgressValue, Mode=OneWay}"
+                         Margin="0,0,0,3"/>
+            <TextBlock Text="{Binding PercentText}"/>
+        </StackPanel>
+
+        <DockPanel Grid.Row="6" Margin="0,0,0,10">
             <TextBlock Text="{Binding PercentText}" DockPanel.Dock="Left"/>
             <TextBlock Text="{Binding EtaText}" DockPanel.Dock="Right" HorizontalAlignment="Right"/>
         </DockPanel>
 
-        <ItemsControl Grid.Row="6" ItemsSource="{Binding Steps}" Margin="0,0,0,12">
+        <ItemsControl Grid.Row="7" ItemsSource="{Binding Steps}" Margin="0,0,0,12">
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
                     <StackPanel Orientation="Horizontal" Margin="0,2">
@@ -164,7 +177,7 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right">
+        <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button x:Name="CancelButton" Content="Cancel" Width="90" Margin="0,0,8,0" Click="CancelButton_Click"/>
             <Button x:Name="CloseButton" Content="Close" Width="90" Visibility="Collapsed" Click="CloseButton_Click"/>
         </StackPanel>

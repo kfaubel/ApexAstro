@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Threading;
@@ -344,11 +345,48 @@ namespace ApexAstro.Wpf
     {
         public string FilterName { get; init; } = string.Empty;
         public double MedianTemporalSnr { get; init; }
+        public double? TargetMedianTemporalSnr { get; init; }
+        public double? BackgroundMedianTemporalSnr { get; init; }
+        public double? StackEquivalentSnr { get; init; }
         public int FrameCount { get; init; }
+        public string SnrContextLabel { get; init; } = "Current folder";
+        public string PlanningSnrSource { get; init; } = "Median (fallback)";
         public double? IntegrationMinutes { get; init; }
         public double? AdditionalMinutesTo30 { get; init; }
         public double? AdditionalMinutesTo60 { get; init; }
         public double? AdditionalMinutesTo90 { get; init; }
+
+        public bool HasStackEquivalentSnr => StackEquivalentSnr.HasValue && double.IsFinite(StackEquivalentSnr.Value) && StackEquivalentSnr.Value > 0;
+        public bool HasMedianTemporalSnr => double.IsFinite(MedianTemporalSnr);
+        public bool HasSplitTemporalSnr => TargetMedianTemporalSnr.HasValue && BackgroundMedianTemporalSnr.HasValue
+            && double.IsFinite(TargetMedianTemporalSnr.Value)
+            && double.IsFinite(BackgroundMedianTemporalSnr.Value);
+        public bool ShowSplitTemporalSnr => HasMedianTemporalSnr && HasSplitTemporalSnr;
+        public bool ShowSingleTemporalSnr => HasMedianTemporalSnr && !HasSplitTemporalSnr;
+        public string StackEquivalentSnrDisplay => HasStackEquivalentSnr
+            ? StackEquivalentSnr!.Value.ToString("F2", CultureInfo.InvariantCulture)
+            : "n/a";
+        public string StackEquivalentSnrTooltip => HasStackEquivalentSnr
+            ? HasSplitTemporalSnr
+                ? $"Gemini-style signal SNR. Target/Background temporal SNR: {TargetMedianTemporalSnr.GetValueOrDefault():F2}/{BackgroundMedianTemporalSnr.GetValueOrDefault():F2}."
+                : "Gemini-style signal SNR."
+            : "SNR is missing.";
+        public string TargetTemporalSnrDisplay => TargetMedianTemporalSnr.GetValueOrDefault().ToString("F2", CultureInfo.InvariantCulture);
+        public string BackgroundTemporalSnrDisplay => BackgroundMedianTemporalSnr.GetValueOrDefault().ToString("F2", CultureInfo.InvariantCulture);
+        public string SingleTemporalSnrDisplay => HasMedianTemporalSnr
+            ? MedianTemporalSnr.ToString("F2", CultureInfo.InvariantCulture)
+            : "n/a";
+        public string MedianTemporalSnrDisplay => HasMedianTemporalSnr
+            ? HasSplitTemporalSnr
+                ? $"{TargetMedianTemporalSnr.GetValueOrDefault().ToString("F2", CultureInfo.InvariantCulture)}/{BackgroundMedianTemporalSnr.GetValueOrDefault().ToString("F2", CultureInfo.InvariantCulture)}"
+                : MedianTemporalSnr.ToString("F2", CultureInfo.InvariantCulture)
+            : "n/a";
+        public string MedianTemporalSnrTooltip => HasMedianTemporalSnr
+            ? HasSplitTemporalSnr
+                ? "Target/Background median temporal SNR values"
+                : "Median temporal SNR"
+            : $"{SnrContextLabel} SNR is missing. Update this folder's SNR to continue.";
+        public string AdditionalTimeTooltip => $"Additional time estimate uses {PlanningSnrSource} SNR.";
 
         public string IntegrationMinutesDisplay => FormatMinutes(IntegrationMinutes);
         public string AdditionalTo30Display => FormatAdditionalMinutes(AdditionalMinutesTo30);

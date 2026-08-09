@@ -19,8 +19,6 @@ namespace ApexAstro.Wpf
 
         private List<AutoMarkCriteriaViewModel> _criteria;
         private readonly Dictionary<string, AutoSelectCriteriaSetting> _savedCriteriaByKey;
-        public bool MarkBottomPerFrameSnr { get; private set; }
-        public double BottomPerFrameSnrPercent { get; private set; }
 
         /// <summary>
         /// Creates the dialog with the specified keywords to check
@@ -30,9 +28,7 @@ namespace ApexAstro.Wpf
         public AutoMarkDialog(
             IEnumerable<string> customKeywords,
             IEnumerable<string> fitsKeywords,
-            IEnumerable<AutoSelectCriteriaSetting>? savedCriteria = null,
-            bool markBottomPerFrameSnr = false,
-            double bottomPerFrameSnrPercent = 20.0)
+            IEnumerable<AutoSelectCriteriaSetting>? savedCriteria = null)
         {
             InitializeComponent();
 
@@ -77,9 +73,6 @@ namespace ApexAstro.Wpf
 
             // Bind to the UI
             KeywordsItemsControl.ItemsSource = _criteria;
-
-            MarkBottomSnrCheckBox.IsChecked = markBottomPerFrameSnr;
-            BottomSnrPercentTextBox.Text = bottomPerFrameSnrPercent.ToString("F0");
         }
 
         /// <summary>
@@ -166,18 +159,6 @@ namespace ApexAstro.Wpf
             {
                 var enabledCriteria = new List<AutoMarkCriteria>();
 
-                bool markBottom = MarkBottomSnrCheckBox.IsChecked == true;
-                double bottomPercent = 20.0;
-                if (markBottom)
-                {
-                    if (!double.TryParse(BottomSnrPercentTextBox.Text, out bottomPercent) || bottomPercent <= 0 || bottomPercent > 100)
-                    {
-                        System.Windows.MessageBox.Show("Bottom % must be a number between 0 and 100.",
-                            "Invalid Input", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
-                        return;
-                    }
-                }
-
                 foreach (var vm in _criteria.Where(c => c.IsEnabled))
                 {
                     var criteria = new AutoMarkCriteria
@@ -220,15 +201,12 @@ namespace ApexAstro.Wpf
                     enabledCriteria.Add(criteria);
                 }
 
-                if (enabledCriteria.Count == 0 && !markBottom)
+                if (enabledCriteria.Count == 0)
                 {
                 System.Windows.MessageBox.Show("Please enable at least one criteria to apply.",
                     "No Criteria", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
                     return;
                 }
-
-                MarkBottomPerFrameSnr = markBottom;
-                BottomPerFrameSnrPercent = bottomPercent;
 
                 // Raise the event with the criteria
                 ApplyRequested?.Invoke(this, enabledCriteria);

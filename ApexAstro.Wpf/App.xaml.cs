@@ -4,6 +4,8 @@ using System.IO.Pipes;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Runtime.InteropServices;
+using System.Windows.Interop;
 using ApexAstro.Wpf.Services;
 
 namespace ApexAstro.Wpf
@@ -15,6 +17,16 @@ namespace ApexAstro.Wpf
     /// </summary>
     public partial class App : System.Windows.Application
     {
+        private const string ActivateMessage = "__ACTIVATE__";
+
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+
+        private const int SW_RESTORE = 9;
+
         private static Mutex? _mutex;
         private const string MutexName = "ApexAstro_SingleInstance_Mutex";
         private const string PipeName = "ApexAstro_SingleInstance_Pipe";
@@ -61,11 +73,9 @@ namespace ApexAstro.Wpf
             if (!createdNew)
             {
                 // Another instance is already running
-                bool forwarded = false;
-                if (e.Args.Length > 0)
-                {
-                    forwarded = TrySendPathToRunningInstance(e.Args[0]);
-                }
+                bool forwarded = e.Args.Length > 0
+                    ? TrySendPathToRunningInstance(e.Args[0])
+                    : TrySendPathToRunningInstance(ActivateMessage);
 
                 if (!forwarded)
                 {
@@ -196,14 +206,14 @@ namespace ApexAstro.Wpf
             base.OnExit(e);
         }
 
-        private bool TrySendPathToRunningInstance(string path)
+        private bool TrySendPathToRunningInstance(string message)
         {
             try
             {
                 using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
                 client.Connect(500);
                 using var writer = new StreamWriter(client, Encoding.UTF8, 1024, leaveOpen: false);
-                writer.WriteLine(path);
+                writer.WriteLine(message);
                 writer.Flush();
                 return true;
             }
@@ -242,8 +252,14 @@ namespace ApexAstro.Wpf
                             {
                                 if (MainWindow is MainWindow runningWindow)
                                 {
-                                    runningWindow.Activate();
-                                    await runningWindow.OpenExternalPathAsync(incomingPath);
+                                    BringWindowToForeground(runningWindow);
+
+                                    if (!string.Equals(incomingPath, ActivateMessage, StringComparison.Ordinal))
+                                    {
+                                        await runningWindow.OpenExternalPathAsync(incomingPath);
+                                    }
+
+                                    BringWindowToForeground(runningWindow);
                                 }
                             });
                         }
@@ -258,6 +274,31 @@ namespace ApexAstro.Wpf
                     }
                 }
             }, token);
+        }
+
+        private static void BringWindowToForeground(Window window)
+        {
+            if (window.WindowState == WindowState.Minimized)
+            {
+                window.WindowState = WindowState.Normal;
+            }
+
+            if (!window.IsVisible)
+            {
+                window.Show();
+            }
+
+            window.Activate();
+            window.Topmost = true;
+            window.Topmost = false;
+            window.Focus();
+
+            var handle = new WindowInteropHelper(window).Handle;
+            if (handle != IntPtr.Zero)
+            {
+                ShowWindowAsync(handle, SW_RESTORE);
+                SetForegroundWindow(handle);
+            }
         }
 
         /// <summary>

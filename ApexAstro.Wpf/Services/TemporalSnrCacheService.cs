@@ -113,6 +113,9 @@ namespace ApexAstro.Wpf.Services
                             ReferenceFile = filter.ReferenceFile,
                             MeanTemporalSnr = filter.MeanTemporalSnr,
                             MedianTemporalSnr = filter.MedianTemporalSnr,
+                            StackEquivalentSnr = filter.StackEquivalentSnr,
+                            TargetMedianTemporalSnr = filter.TargetMedianTemporalSnr,
+                            BackgroundMedianTemporalSnr = filter.BackgroundMedianTemporalSnr,
                             StandardDeviationTemporalSnr = filter.StandardDeviationTemporalSnr,
                             SourceFiles = filter.SourceFiles
                                 .Select(source => new TemporalSnrCacheSourceEntry
@@ -162,6 +165,9 @@ namespace ApexAstro.Wpf.Services
                                 filter.SourceFiles.Select(source => source.FileName),
                                 folderPath),
                             MedianTemporalSnr = filter.MedianTemporalSnr,
+                            StackEquivalentSnr = filter.StackEquivalentSnr,
+                            TargetMedianTemporalSnr = filter.TargetMedianTemporalSnr,
+                            BackgroundMedianTemporalSnr = filter.BackgroundMedianTemporalSnr,
                             MeanTemporalSnr = filter.MeanTemporalSnr,
                             StandardDeviationTemporalSnr = filter.StandardDeviationTemporalSnr,
                             CoefficientOfVariation = filter.MeanTemporalSnr > 1e-9
@@ -441,6 +447,9 @@ namespace ApexAstro.Wpf.Services
         public string ReferenceFile { get; set; } = string.Empty;
         public double MeanTemporalSnr { get; set; }
         public double MedianTemporalSnr { get; set; }
+        public double? StackEquivalentSnr { get; set; }
+        public double? TargetMedianTemporalSnr { get; set; }
+        public double? BackgroundMedianTemporalSnr { get; set; }
         public double StandardDeviationTemporalSnr { get; set; }
         public List<TemporalSnrCacheSourceEntry> SourceFiles { get; set; } = new();
     }
@@ -471,6 +480,9 @@ namespace ApexAstro.Wpf.Services
         public int FrameCount { get; set; }
         public double? IntegrationMinutes { get; set; }
         public double MedianTemporalSnr { get; set; }
+        public double? StackEquivalentSnr { get; set; }
+        public double? TargetMedianTemporalSnr { get; set; }
+        public double? BackgroundMedianTemporalSnr { get; set; }
         public double MeanTemporalSnr { get; set; }
         public double StandardDeviationTemporalSnr { get; set; }
         public double CoefficientOfVariation { get; set; }

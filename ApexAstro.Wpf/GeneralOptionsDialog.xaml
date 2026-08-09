@@ -135,30 +135,6 @@
                     </StackPanel>
                 </GroupBox>
 
-                <GroupBox Header="Per-frame SNR" Margin="0,0,0,10">
-                    <StackPanel Margin="10">
-                        <CheckBox Name="ShowPerFrameSnrColumnCheckBox"
-                                 Content="Show per-frame SNR"
-                                 Margin="0,5"
-                                 Checked="ShowPerFrameSnrColumnCheckBox_CheckedChanged"
-                                 Unchecked="ShowPerFrameSnrColumnCheckBox_CheckedChanged"/>
-                        <StackPanel Name="PerFrameSnrThresholdPanel" Margin="25,5,0,5" IsEnabled="False">
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                <TextBlock Text="Green threshold:"
-                                           VerticalAlignment="Center"
-                                           Margin="0,0,8,0"/>
-                                <TextBox Name="PerFrameSnrThresholdTextBox" Width="80"/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Yellow threshold:"
-                                           VerticalAlignment="Center"
-                                           Margin="0,0,8,0"/>
-                                <TextBox Name="PerFrameSnrYellowThresholdTextBox" Width="80"/>
-                            </StackPanel>
-                        </StackPanel>
-                    </StackPanel>
-                </GroupBox>
-
             </StackPanel>
         </Grid>
         
