@@ -10,6 +10,7 @@ namespace ApexAstro.Wpf.Models
         private Dictionary<string, string> _customKeywords = new Dictionary<string, string>();
         private Dictionary<string, string> _fitsKeywords = new Dictionary<string, string>();
         private Dictionary<string, string> _csvKeywords = new Dictionary<string, string>();
+        private Dictionary<string, string> _arwKeywords = new Dictionary<string, string>();
         private bool _isSelected = false;
         private double? _median;
         private double? _mean;
@@ -219,6 +220,19 @@ namespace ApexAstro.Wpf.Models
             {
                 _csvKeywords = value;
                 OnPropertyChanged(nameof(CsvKeywords));
+
+                foreach (var key in value.Keys)
+                    OnPropertyChanged(key);
+            }
+        }
+
+        public Dictionary<string, string> ArwKeywords
+        {
+            get => _arwKeywords;
+            set
+            {
+                _arwKeywords = value;
+                OnPropertyChanged(nameof(ArwKeywords));
 
                 foreach (var key in value.Keys)
                     OnPropertyChanged(key);

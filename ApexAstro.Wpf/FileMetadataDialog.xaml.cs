@@ -77,6 +77,13 @@ namespace ApexAstro.Wpf
                         FitsHeadersTab.Header = "XISF Metadata"; // Change tab header for XISF files
                         MetadataTabControl.SelectedItem = FitsHeadersTab; // Show metadata tab first for XISF files
                     }
+                    else if (IsArwFile(_fileItem.Path))
+                    {
+                        LoadArwMetadata();
+                        FitsHeadersTab.Visibility = Visibility.Visible;
+                        FitsHeadersTab.Header = "ARW Metadata";
+                        MetadataTabControl.SelectedItem = FitsHeadersTab;
+                    }
                     else if (IsStandardImageFile(_fileItem.Path))
                     {
                         LoadExifMetadata();
@@ -289,6 +296,60 @@ namespace ApexAstro.Wpf
             }
         }
 
+        private void LoadArwMetadata()
+        {
+            try
+            {
+                var directories = MetadataExtractor.ImageMetadataReader.ReadMetadata(_fileItem.Path);
+
+                _allFitsHeaders.Clear();
+
+                var relevantDirectoryTypes = new HashSet<string>
+                {
+                    "EXIF IFD0", "EXIF SubIFD", "GPS", "IPTC", "XMP", "ICC Profile",
+                    "JPEG", "PNG-IHDR", "PNG-tEXt", "TIFF", "File Type", "Sony Makernote"
+                };
+
+                foreach (var directory in directories)
+                {
+                    if (!relevantDirectoryTypes.Contains(directory.Name) &&
+                        !directory.Name.StartsWith("EXIF", StringComparison.OrdinalIgnoreCase) &&
+                        !directory.Name.StartsWith("GPS", StringComparison.OrdinalIgnoreCase) &&
+                        !directory.Name.Contains("Sony", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    foreach (var tag in directory.Tags)
+                    {
+                        var description = tag.Description ?? string.Empty;
+                        if (description.Length > 500)
+                        {
+                            description = description.Substring(0, 500) + "...";
+                        }
+
+                        var arwHeader = new FitsHeaderItem
+                        {
+                            Key = tag.Name,
+                            Value = description,
+                            Type = directory.Name,
+                            Comment = $"Tag ID: {tag.Type}"
+                        };
+                        _allFitsHeaders.Add(arwHeader);
+                    }
+                }
+
+                _allFitsHeaders.Sort((a, b) => string.Compare(a.Key, b.Key, StringComparison.OrdinalIgnoreCase));
+                RefreshFitsHeadersList();
+                FitsCountLabel.Text = $"{_allFitsHeaders.Count} metadata tags";
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show($"Error loading ARW metadata: {ex.Message}", "ARW Error",
+                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+            }
+        }
+
         private void RefreshFitsHeadersList()
         {
             var searchText = FitsSearchBox.Text?.ToLowerInvariant() ?? "";
@@ -341,6 +402,11 @@ namespace ApexAstro.Wpf
                    extension == ".gif" || extension == ".webp";
         }
 
+        private static bool IsArwFile(string filePath)
+        {
+            return Path.GetExtension(filePath).Equals(".arw", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static string FormatFileSize(long bytes)
         {
             string[] sizes = { "B", "KB", "MB", "GB", "TB" };
@@ -366,6 +432,7 @@ namespace ApexAstro.Wpf
                 ".tiff" or ".tif" => "TIFF Image",
                 ".gif" => "GIF Image",
                 ".webp" => "WebP Image",
+                ".arw" => "Sony ARW Raw Image",
                 _ => $"{extension.ToUpperInvariant()} File"
             };
         }

@@ -307,7 +307,7 @@ namespace ApexAstro.Wpf.ViewModels
                         }
 
                         // Extract both custom and FITS keywords for each file
-                        _keywordExtractionService.PopulateKeywords(fileItem, _appConfig.CustomKeywords, _appConfig.FitsKeywords, !_appConfig.ScanXisfForFitsKeywords, calculateStats);
+                        _keywordExtractionService.PopulateKeywords(fileItem, _appConfig.CustomKeywords, _appConfig.FitsKeywords, !_appConfig.ScanXisfForFitsKeywords, calculateStats, _appConfig.ArwKeywords);
                         
                         // Populate CSV keywords from ImageMetaData.csv (if any columns are configured)
                         if (_appConfig.CsvKeywords.Count > 0)
@@ -494,7 +494,7 @@ namespace ApexAstro.Wpf.ViewModels
                         }
 
                         // Extract both custom and FITS keywords for the file
-                        _keywordExtractionService.PopulateKeywords(fileItem, _appConfig.CustomKeywords, _appConfig.FitsKeywords, skipXisf: false, calculateStats);
+                        _keywordExtractionService.PopulateKeywords(fileItem, _appConfig.CustomKeywords, _appConfig.FitsKeywords, skipXisf: false, calculateMedian: calculateStats, arwKeywords: _appConfig.ArwKeywords);
                         
                         // Populate CSV keywords
                         if (_appConfig.CsvKeywords.Count > 0)
@@ -612,6 +612,16 @@ namespace ApexAstro.Wpf.ViewModels
         {
             foreach (var fileItem in Files)
                 fileItem.CsvKeywords = _csvMetadataService.GetValues(fileItem.Name, _appConfig.CsvKeywords);
+        }
+
+        /// <summary>
+        /// Refreshes ARW metadata keywords for all files in the current list.
+        /// Called when ARW metadata configuration changes.
+        /// </summary>
+        public void RefreshFileListArwKeywords()
+        {
+            foreach (var fileItem in Files)
+                fileItem.ArwKeywords = _keywordExtractionService.ExtractArwKeywords(fileItem.Path, _appConfig.ArwKeywords);
         }
         #endregion
         #region Navigation and Playback Properties
@@ -1058,8 +1068,8 @@ namespace ApexAstro.Wpf.ViewModels
             return columnName switch
             {
                 "File" => direction == ListSortDirection.Ascending 
-                    ? files.OrderBy(f => _appConfig.ShowFullFilename ? f.Name : f.NameWithoutExtension, StringComparer.OrdinalIgnoreCase).ToList()
-                    : files.OrderByDescending(f => _appConfig.ShowFullFilename ? f.Name : f.NameWithoutExtension, StringComparer.OrdinalIgnoreCase).ToList(),
+                    ? files.OrderBy(f => GetDisplayFileName(f), StringComparer.OrdinalIgnoreCase).ToList()
+                    : files.OrderByDescending(f => GetDisplayFileName(f), StringComparer.OrdinalIgnoreCase).ToList(),
 
                 "Date" => direction == ListSortDirection.Ascending
                     ? files.OrderBy(f => f.FilenameDate, StringComparer.OrdinalIgnoreCase).ToList()
@@ -1097,6 +1107,9 @@ namespace ApexAstro.Wpf.ViewModels
 
                 _ when _appConfig.FitsKeywords.Contains(columnName) =>
                     SortByDictionaryValue(files, f => f.FitsKeywords, columnName, direction),
+
+                _ when _appConfig.ArwKeywords.Contains(columnName) =>
+                    SortByDictionaryValue(files, f => f.ArwKeywords, columnName, direction),
                     
                 _ => files // No sorting for unknown columns
             };
@@ -1629,9 +1642,11 @@ namespace ApexAstro.Wpf.ViewModels
                 _appConfig.ScanXisfForFitsKeywords,
                 _appConfig.MedianDisplayMode,
                 _appConfig.ShowHistogram,
+                _appConfig.HideUnusedMetadataColumns,
                 _appConfig.FitsKeywords,
                 _appConfig.CustomKeywords,
-                _appConfig.CsvKeywords);
+                _appConfig.CsvKeywords,
+                _appConfig.ArwKeywords);
                 
             if (result.showSizeColumn.HasValue)
             {
@@ -1685,6 +1700,11 @@ namespace ApexAstro.Wpf.ViewModels
                     // Notify MainWindow to update histogram visibility
                     HistogramVisibilityChanged?.Invoke(_appConfig.ShowHistogram);
                 }
+
+                if (result.hideUnusedMetadataColumns.HasValue)
+                {
+                    _appConfig.HideUnusedMetadataColumns = result.hideUnusedMetadataColumns.Value;
+                }
                 
                 if (result.scanXisfForFitsKeywords.HasValue)
                 {
@@ -1709,6 +1729,13 @@ namespace ApexAstro.Wpf.ViewModels
                     _appConfig.CsvKeywords = result.csvKeywords;
                     // CSV data is already in memory — re-populate immediately (instant)
                     RefreshFileListCsvKeywords();
+                }
+
+                if (result.arwKeywords != null)
+                {
+                    _appConfig.ArwKeywords = result.arwKeywords;
+                    // ARW metadata is extracted from ARW files only.
+                    RefreshFileListArwKeywords();
                 }
                 
                 _appConfig.Save();
@@ -1821,7 +1848,7 @@ namespace ApexAstro.Wpf.ViewModels
                         (fileItem.FitsKeywords == null || fileItem.FitsKeywords.Count == 0))
                     {
                         // Load FITS keywords from XISF file on-demand
-                        _keywordExtractionService.PopulateKeywords(fileItem, Enumerable.Empty<string>(), _appConfig.FitsKeywords, skipXisf: false, calculateMedian: false);
+                        _keywordExtractionService.PopulateKeywords(fileItem, Enumerable.Empty<string>(), _appConfig.FitsKeywords, skipXisf: false, calculateMedian: false, arwKeywords: _appConfig.ArwKeywords);
                     }
                     
                     var dialog = new FileMetadataDialog(fileItem);
@@ -1973,6 +2000,17 @@ namespace ApexAstro.Wpf.ViewModels
                 OnPropertyChanged(nameof(FileSelectionStatusText));
                 OnPropertyChanged(nameof(StatusBarText));
             }
+        }
+
+        private string GetDisplayFileName(FileItem fileItem)
+        {
+            if (!string.IsNullOrWhiteSpace(fileItem.Path) &&
+                System.IO.Path.GetExtension(fileItem.Path).Equals(".arw", StringComparison.OrdinalIgnoreCase))
+            {
+                return fileItem.Name;
+            }
+
+            return _appConfig.ShowFullFilename ? fileItem.Name : fileItem.NameWithoutExtension;
         }
     }
     

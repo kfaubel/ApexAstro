@@ -36,6 +36,12 @@
     <Resource Include="splash.png" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="..\RELEASE_NOTES.txt">
+      <Link>RELEASE_NOTES.txt</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
     <EmbeddedResource Include="Documentation\GettingStarted.md" />
     <EmbeddedResource Include="Documentation\Help.md" />
     <EmbeddedResource Include="Documentation\ApexAstro view.png" />

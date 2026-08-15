@@ -113,6 +113,7 @@ namespace ApexAstro.Wpf.Services
                 {
                     "*.fits", "*.fit", "*.fts",  // FITS files
                     "*.xisf",                     // XISF files
+                    "*.arw",                      // Sony ARW raw files
                     "*.jpg", "*.jpeg",           // JPEG files
                     "*.png",                     // PNG files
                     "*.bmp",                     // Bitmap files

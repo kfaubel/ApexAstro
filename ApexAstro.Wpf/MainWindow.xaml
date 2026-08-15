@@ -274,7 +274,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*" MinHeight="200"/>
                     <RowDefinition Name="HistogramSplitterRow" Height="Auto"/>
-                    <RowDefinition Name="HistogramRow" Height="200" MinHeight="100"/>
+                    <RowDefinition Name="HistogramRow" Height="200"/>
                 </Grid.RowDefinitions>
 
                 <!-- Image View Controls -->

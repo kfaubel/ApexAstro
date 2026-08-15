@@ -19,7 +19,7 @@ namespace ApexAstro.Wpf.Services
         /// <param name="currentFitsKeywords">The current FITS keywords list.</param>
         /// <param name="currentCustomKeywords">The current custom keywords list.</param>
         /// <returns>A tuple with the new settings, or null values if cancelled.</returns>
-        (bool? showSizeColumn, bool? showFullFilename, bool? showFilenameDateColumn, bool? showFilenameTimeColumn, bool? ShowFilenameFrameColumn, bool? showMedianColumn, ThemeMode? theme, bool? showFullScreenHelp, double? playPauseInterval, bool? scanXisfForFitsKeywords, MedianDisplayMode? medianDisplayMode, bool? showHistogram, List<string>? fitsKeywords, List<string>? customKeywords, List<string>? csvKeywords) ShowGeneralOptionsDialog(
+        (bool? showSizeColumn, bool? showFullFilename, bool? showFilenameDateColumn, bool? showFilenameTimeColumn, bool? ShowFilenameFrameColumn, bool? showMedianColumn, ThemeMode? theme, bool? showFullScreenHelp, double? playPauseInterval, bool? scanXisfForFitsKeywords, MedianDisplayMode? medianDisplayMode, bool? showHistogram, bool? hideUnusedMetadataColumns, List<string>? fitsKeywords, List<string>? customKeywords, List<string>? csvKeywords, List<string>? arwKeywords) ShowGeneralOptionsDialog(
             bool currentShowSizeColumn,
             bool currentShowFullFilename,
             bool currentShowFilenameDateColumn,
@@ -32,8 +32,10 @@ namespace ApexAstro.Wpf.Services
             bool currentScanXisfForFitsKeywords,
             MedianDisplayMode currentMedianDisplayMode,
             bool currentShowHistogram,
+            bool currentHideUnusedMetadataColumns,
             IEnumerable<string> currentFitsKeywords,
             IEnumerable<string> currentCustomKeywords,
-            IEnumerable<string> currentCsvKeywords);
+            IEnumerable<string> currentCsvKeywords,
+            IEnumerable<string> currentArwKeywords);
     }
 }

@@ -4,6 +4,8 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Reflection;
 using System.Diagnostics;
+using System.IO;
+using System.Collections.Generic;
 
 namespace ApexAstro.Wpf.Services
 {
@@ -54,7 +56,7 @@ namespace ApexAstro.Wpf.Services
                         {
                             LatestVersion = latestVersionString,
                             CurrentVersion = _currentVersion,
-                            ReleaseNotes = releaseInfo.body ?? "",
+                            ReleaseNotes = ResolveReleaseNotes(releaseInfo.body),
                             DownloadUrl = releaseInfo.html_url ?? "",
                             ReleaseName = releaseInfo.name ?? $"Version {latestVersionString}",
                             PublishedDate = releaseInfo.published_at
@@ -112,6 +114,107 @@ namespace ApexAstro.Wpf.Services
         public void Dispose()
         {
             _httpClient?.Dispose();
+        }
+
+        private string ResolveReleaseNotes(string? githubReleaseNotes)
+        {
+            if (!string.IsNullOrWhiteSpace(githubReleaseNotes))
+            {
+                return githubReleaseNotes.Trim();
+            }
+
+            var localReleaseNotes = TryReadLocalReleaseNotes();
+            if (!string.IsNullOrWhiteSpace(localReleaseNotes))
+            {
+                return localReleaseNotes;
+            }
+
+            return "No release notes available for this release. Open the release page for details.";
+        }
+
+        private static string? TryReadLocalReleaseNotes()
+        {
+            var candidateFiles = new[]
+            {
+                "RELEASE_NOTES.md",
+                "RELEASE_NOTES.txt",
+                "RELEASE_NOTES"
+            };
+
+            var visitedDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var directory in EnumerateCandidateDirectories())
+            {
+                if (string.IsNullOrWhiteSpace(directory) || !visitedDirectories.Add(directory))
+                {
+                    continue;
+                }
+
+                foreach (var fileName in candidateFiles)
+                {
+                    try
+                    {
+                        var path = Path.Combine(directory, fileName);
+                        if (!File.Exists(path))
+                        {
+                            continue;
+                        }
+
+                        var content = File.ReadAllText(path).Trim();
+                        if (!string.IsNullOrWhiteSpace(content))
+                        {
+                            return content;
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore file access errors and continue trying other paths.
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static IEnumerable<string> EnumerateCandidateDirectories()
+        {
+            var directories = new List<string>();
+
+            void AddDirectoryAndParents(string? startDirectory, int maxLevels)
+            {
+                if (string.IsNullOrWhiteSpace(startDirectory))
+                {
+                    return;
+                }
+
+                var current = startDirectory;
+                for (int i = 0; i <= maxLevels && !string.IsNullOrWhiteSpace(current); i++)
+                {
+                    directories.Add(current);
+
+                    try
+                    {
+                        current = Directory.GetParent(current)?.FullName;
+                    }
+                    catch
+                    {
+                        break;
+                    }
+                }
+            }
+
+            AddDirectoryAndParents(AppContext.BaseDirectory, 4);
+
+            try
+            {
+                AddDirectoryAndParents(Directory.GetCurrentDirectory(), 4);
+            }
+            catch
+            {
+                // Ignore inability to read the current directory.
+            }
+
+            return directories;
         }
     }
 

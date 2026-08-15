@@ -13,6 +13,14 @@ namespace ApexAstro.Wpf.Services
 {
     public class ListViewColumnService : IListViewColumnService
     {
+        private enum MetadataColumnType
+        {
+            Custom,
+            Fits,
+            Csv,
+            Arw
+        }
+
         private readonly System.Windows.Controls.ListView _fileListView;
         private readonly AppConfig _appConfig;
         private GridSplitter? _gridSplitter; // Track the splitter for manual move detection
@@ -97,7 +105,7 @@ namespace ApexAstro.Wpf.Services
             var borderFactory = new FrameworkElementFactory(typeof(System.Windows.Controls.Border));
             borderFactory.SetValue(System.Windows.Controls.Border.BorderBrushProperty, GetCellSeparatorBrush());
             borderFactory.SetValue(System.Windows.Controls.Border.BorderThicknessProperty, new System.Windows.Thickness(0, 0, 1, 0));
-            borderFactory.SetValue(System.Windows.Controls.Border.PaddingProperty, padding ?? new System.Windows.Thickness(4, 1, 4, 1));
+            borderFactory.SetValue(System.Windows.Controls.Border.PaddingProperty, padding ?? new System.Windows.Thickness(2, 1, 2, 1));
             borderFactory.SetValue(System.Windows.Controls.Border.SnapsToDevicePixelsProperty, true);
             borderFactory.AppendChild(innerFactory);
             return new DataTemplate { VisualTree = borderFactory };
@@ -118,9 +126,10 @@ namespace ApexAstro.Wpf.Services
             }
 
             textFactory.SetValue(System.Windows.FrameworkElement.MarginProperty, new System.Windows.Thickness(0));
-            textFactory.SetValue(System.Windows.Controls.TextBlock.TextTrimmingProperty, System.Windows.TextTrimming.CharacterEllipsis);
+            textFactory.SetValue(System.Windows.Controls.TextBlock.TextTrimmingProperty, System.Windows.TextTrimming.None);
             textFactory.SetValue(System.Windows.Controls.TextBlock.VerticalAlignmentProperty, System.Windows.VerticalAlignment.Center);
             textFactory.SetValue(System.Windows.Controls.TextBlock.TextAlignmentProperty, textAlignment);
+            textFactory.SetValue(System.Windows.Controls.TextBlock.TextWrappingProperty, System.Windows.TextWrapping.NoWrap);
             textFactory.SetValue(System.Windows.FrameworkElement.HorizontalAlignmentProperty, centerHorizontally ? System.Windows.HorizontalAlignment.Center : System.Windows.HorizontalAlignment.Stretch);
 
             if (!string.IsNullOrWhiteSpace(toolTip))
@@ -214,6 +223,9 @@ namespace ApexAstro.Wpf.Services
             if (!(_fileListView.View is GridView gridView)) return;
             gridView.Columns.Clear();
 
+            bool hasArwFiles = HasArwFilesInCurrentList();
+            bool isArwMode = hasArwFiles;
+
             // Calculate optimal column widths based on content
             var columnWidths = CalculateOptimalColumnWidths();
 
@@ -231,19 +243,24 @@ namespace ApexAstro.Wpf.Services
             gridView.Columns.Add(checkboxColumn);
 
             // File column
-            // When ShowFullFilename is off, hide the File column entirely.
-            if (_appConfig.ShowFullFilename)
+            // When ShowFullFilename is off, keep the File column visible for ARW files so their
+            // full file names are always shown.
+            if (_appConfig.ShowFullFilename || hasArwFiles)
             {
                 var fileColumn = new GridViewColumn
                 {
                     Header = CreateSortableHeader("File"),
                     Width = GetFileColumnWidth(), // Always calculate fresh (narrow responsive width)
-                    CellTemplate = CreateTextCellTemplate(new System.Windows.Data.Binding("Name"))
+                    CellTemplate = CreateTextCellTemplate(new System.Windows.Data.Binding("Path")
+                    {
+                        Converter = new FileNameDisplayConverter(),
+                        ConverterParameter = _appConfig.ShowFullFilename
+                    })
                 };
                 gridView.Columns.Add(fileColumn);
             }
 
-            if (_appConfig.ShowFilenameDateColumn)
+            if (_appConfig.ShowFilenameDateColumn && !isArwMode)
             {
                 var dateColumn = new GridViewColumn
                 {
@@ -254,7 +271,7 @@ namespace ApexAstro.Wpf.Services
                 gridView.Columns.Add(dateColumn);
             }
 
-            if (_appConfig.ShowFilenameTimeColumn)
+            if (_appConfig.ShowFilenameTimeColumn && !isArwMode)
             {
                 var timeColumn = new GridViewColumn
                 {
@@ -265,7 +282,7 @@ namespace ApexAstro.Wpf.Services
                 gridView.Columns.Add(timeColumn);
             }
 
-            if (_appConfig.ShowFilenameFrameColumn)
+            if (_appConfig.ShowFilenameFrameColumn && !isArwMode)
             {
                 var frameHeader = CreateSortableHeader("Frame");
                 frameHeader.Content = "Seq";
@@ -367,6 +384,12 @@ namespace ApexAstro.Wpf.Services
             // Custom keyword columns (green) - each has individual width based on keyword length
             foreach (var keyword in _appConfig.CustomKeywords)
             {
+                if (isArwMode)
+                    continue;
+
+                if (!ShouldIncludeMetadataColumn(keyword, MetadataColumnType.Custom))
+                    continue;
+
                 var factory = new FrameworkElementFactory(typeof(System.Windows.Controls.TextBlock));
                 
                 // Use SafeDictionaryConverter with parameter to avoid KeyNotFoundException
@@ -396,6 +419,12 @@ namespace ApexAstro.Wpf.Services
             // FITS keyword columns (blue) - each has individual width based on keyword length
             foreach (var keyword in _appConfig.FitsKeywords)
             {
+                if (isArwMode)
+                    continue;
+
+                if (!ShouldIncludeMetadataColumn(keyword, MetadataColumnType.Fits))
+                    continue;
+
                 var factory = new FrameworkElementFactory(typeof(System.Windows.Controls.TextBlock));
                 
                 // Use SafeDictionaryConverter with parameter to avoid KeyNotFoundException
@@ -425,6 +454,12 @@ namespace ApexAstro.Wpf.Services
             // CSV metadata columns (orange) - data from ImageMetaData.csv in the current folder
             foreach (var keyword in _appConfig.CsvKeywords)
             {
+                if (isArwMode)
+                    continue;
+
+                if (!ShouldIncludeMetadataColumn(keyword, MetadataColumnType.Csv))
+                    continue;
+
                 var factory = new FrameworkElementFactory(typeof(System.Windows.Controls.TextBlock));
 
                 var binding = new System.Windows.Data.Binding("CsvKeywords");
@@ -446,6 +481,32 @@ namespace ApexAstro.Wpf.Services
                     CellTemplate = CreateTextCellTemplate(binding, foregroundBinding)
                 };
                 gridView.Columns.Add(column);
+            }
+
+            bool showArwColumns = _appConfig.ArwKeywords.Count > 0 && isArwMode;
+            if (showArwColumns)
+            {
+                foreach (var keyword in _appConfig.ArwKeywords)
+                {
+                    if (!ShouldIncludeMetadataColumn(keyword, MetadataColumnType.Arw))
+                        continue;
+
+                    var binding = new System.Windows.Data.Binding("ArwKeywords");
+                    binding.Converter = new SafeDictionaryConverter();
+                    binding.ConverterParameter = keyword;
+
+                    var foregroundBinding = new System.Windows.Data.Binding();
+                    foregroundBinding.Source = System.Windows.Application.Current;
+                    foregroundBinding.Path = new System.Windows.PropertyPath("Resources[ThemeAccentPurple]");
+
+                    var column = new GridViewColumn
+                    {
+                        Header = CreateSortableHeader(keyword, GetDisplayName(keyword)),
+                        Width = CalculateDataDrivenColumnWidth(keyword, false),
+                        CellTemplate = CreateTextCellTemplate(binding, foregroundBinding)
+                    };
+                    gridView.Columns.Add(column);
+                }
             }
 
             // Skip automatic auto-resize to keep columns narrow
@@ -573,7 +634,7 @@ namespace ApexAstro.Wpf.Services
                 switch (columnName.ToLowerInvariant())
                 {
                     case "file":
-                        content = _appConfig.ShowFullFilename ? item.Name : item.NameWithoutExtension;
+                        content = GetDisplayFileName(item);
                         break;
                     case "date":
                         content = item.FilenameDate;
@@ -600,6 +661,10 @@ namespace ApexAstro.Wpf.Services
                         else if (!isCustomKeyword && item.CsvKeywords.ContainsKey(columnName))
                         {
                             content = item.CsvKeywords[columnName];
+                        }
+                        else if (!isCustomKeyword && item.ArwKeywords.ContainsKey(columnName))
+                        {
+                            content = item.ArwKeywords[columnName];
                         }
                         break;
                 }
@@ -641,8 +706,8 @@ namespace ApexAstro.Wpf.Services
             // Keyword-specific minimums prevent decimal values from being ellipsized.
             double keywordMinWidth = GetKeywordMinimumWidth(columnName);
             optimalWidth = Math.Max(optimalWidth, Math.Max(40, keywordMinWidth));
-            // Increase maximum to prevent cutoff for longer values (FILTER, IMAGETYP, etc.)
-            optimalWidth = Math.Min(optimalWidth, 300); // Maximum 300px (was 200px)
+            // Allow columns to grow enough to avoid truncation.
+            optimalWidth = Math.Min(optimalWidth, 800); // Maximum 800px to fit long metadata values
             
             return Math.Round(optimalWidth);
         }
@@ -716,32 +781,78 @@ namespace ApexAstro.Wpf.Services
             
             // Always use fresh calculations - never load saved column widths
             // This ensures columns are always sized based on current data and window size
-            if (_appConfig.ShowFullFilename)
+            bool hasArwFiles = HasArwFilesInCurrentList();
+            if (_appConfig.ShowFullFilename || hasArwFiles)
             {
                 widths["File"] = GetFileColumnWidth();  // Responsive filename column (35% of window width)
             }
-            widths["Date"] = 95;
-            widths["Time"] = 85;
-            widths["Frame"] = 60;
-            widths["Size"] = 85;       // Fixed width for size column
-            
-            // Custom and FITS keyword columns - data-driven widths based on actual content
-            foreach (var keyword in _appConfig.CustomKeywords)
+            if (!hasArwFiles)
             {
-                widths[$"Custom_{keyword}"] = CalculateDataDrivenColumnWidth(keyword, true);
-            }
-            
-            foreach (var keyword in _appConfig.CsvKeywords)
-            {
-                widths[$"CSV_{keyword}"] = CalculateDataDrivenColumnWidth(keyword, false);
-            }
+                widths["Date"] = 95;
+                widths["Time"] = 85;
+                widths["Frame"] = 60;
 
-            foreach (var keyword in _appConfig.FitsKeywords)
+                // Custom/FITS/Session metadata are only shown in FITS/XISF mode.
+                foreach (var keyword in _appConfig.CustomKeywords)
+                {
+                    widths[$"Custom_{keyword}"] = CalculateDataDrivenColumnWidth(keyword, true);
+                }
+
+                foreach (var keyword in _appConfig.CsvKeywords)
+                {
+                    widths[$"CSV_{keyword}"] = CalculateDataDrivenColumnWidth(keyword, false);
+                }
+
+                foreach (var keyword in _appConfig.FitsKeywords)
+                {
+                    widths[$"FITS_{keyword}"] = CalculateDataDrivenColumnWidth(keyword, false);
+                }
+            }
+            widths["Size"] = 85;       // Fixed width for size column
+
+            if (_appConfig.ArwKeywords.Count > 0 && hasArwFiles)
             {
-                widths[$"FITS_{keyword}"] = CalculateDataDrivenColumnWidth(keyword, false);
+                foreach (var keyword in _appConfig.ArwKeywords)
+                {
+                    widths[$"ARW_{keyword}"] = CalculateDataDrivenColumnWidth(keyword, false);
+                }
             }
             
             return widths;
+        }
+
+        private bool HasArwFilesInCurrentList()
+        {
+            var fileItems = GetFileItemsFromDataContext();
+            return fileItems != null && fileItems.Any(item =>
+                item.Path.EndsWith(".arw", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private bool ShouldIncludeMetadataColumn(string keyword, MetadataColumnType metadataColumnType)
+        {
+            if (!_appConfig.HideUnusedMetadataColumns)
+                return true;
+
+            var fileItems = GetFileItemsFromDataContext();
+            if (fileItems == null || !fileItems.Any())
+                return true;
+
+            foreach (var item in fileItems)
+            {
+                string? value = metadataColumnType switch
+                {
+                    MetadataColumnType.Custom => item.CustomKeywords.TryGetValue(keyword, out var custom) ? custom : null,
+                    MetadataColumnType.Fits => item.FitsKeywords.TryGetValue(keyword, out var fits) ? fits : null,
+                    MetadataColumnType.Csv => item.CsvKeywords.TryGetValue(keyword, out var csv) ? csv : null,
+                    MetadataColumnType.Arw => item.ArwKeywords.TryGetValue(keyword, out var arw) ? arw : null,
+                    _ => null
+                };
+
+                if (!string.IsNullOrWhiteSpace(value))
+                    return true;
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -1275,8 +1386,19 @@ namespace ApexAstro.Wpf.Services
                 case "size":
                     return 60;  // Size should stay narrow
                 default:
-                    return Math.Min(80, Math.Max(45, header.Length * 6)); // Keyword columns very compact
+                    return Math.Min(800, Math.Max(45, header.Length * 6)); // Allow keyword columns to expand fully
             }
+        }
+
+        private string GetDisplayFileName(Models.FileItem item)
+        {
+            if (!string.IsNullOrWhiteSpace(item.Path) &&
+                System.IO.Path.GetExtension(item.Path).Equals(".arw", StringComparison.OrdinalIgnoreCase))
+            {
+                return item.Name;
+            }
+
+            return _appConfig.ShowFullFilename ? item.Name : item.NameWithoutExtension;
         }
     }
 }

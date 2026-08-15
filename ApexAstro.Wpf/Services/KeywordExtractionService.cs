@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using ApexAstro.Core;
 using ApexAstro.Utils;
+using MetadataExtractor;
 
 namespace ApexAstro.Wpf.Services
 {
@@ -93,6 +94,49 @@ namespace ApexAstro.Wpf.Services
             return result;
         }
 
+        public Dictionary<string, string> ExtractArwKeywords(string filePath, IEnumerable<string> keywords)
+        {
+            var operationStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var result = new Dictionary<string, string>();
+            var requestedKeywords = keywords.ToList();
+
+            if (!File.Exists(filePath) || requestedKeywords.Count == 0 || !IsArwFile(filePath))
+                return result;
+
+            try
+            {
+                var directories = ImageMetadataReader.ReadMetadata(filePath);
+                var metadataByNormalizedKey = BuildArwMetadataMap(directories);
+
+                foreach (var keyword in requestedKeywords)
+                {
+                    foreach (var normalizedAlias in BuildArwAliasKeys(keyword))
+                    {
+                        if (metadataByNormalizedKey.TryGetValue(normalizedAlias, out var value) &&
+                            !string.IsNullOrWhiteSpace(value))
+                        {
+                            result[keyword] = value;
+                            break;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.LoggingService?.LogError("ARW Keyword Extraction", $"Failed to extract ARW metadata from {System.IO.Path.GetFileName(filePath)}", ex);
+            }
+            finally
+            {
+                operationStopwatch.Stop();
+                if (operationStopwatch.ElapsedMilliseconds > 3000)
+                {
+                    App.LoggingService?.LogWarning("ARW Keyword Extraction", $"'{System.IO.Path.GetFileName(filePath)}' took {operationStopwatch.ElapsedMilliseconds}ms (>3s threshold)");
+                }
+            }
+
+            return result;
+        }
+
         private static bool TryGetKeywordValueWithAliases<T>(
             Dictionary<string, T> values,
             string requestedKeyword,
@@ -147,14 +191,88 @@ namespace ApexAstro.Wpf.Services
             return keyword.Replace("_", string.Empty).Replace("-", string.Empty).ToUpperInvariant();
         }
 
-
-
-        public void PopulateKeywords(Models.FileItem fileItem, IEnumerable<string> customKeywords, IEnumerable<string> fitsKeywords, bool skipXisf = false)
+        private static string NormalizeMetadataKey(string value)
         {
-            PopulateKeywords(fileItem, customKeywords, fitsKeywords, skipXisf, calculateMedian: false);
+            var chars = value.Where(char.IsLetterOrDigit)
+                .Select(char.ToUpperInvariant)
+                .ToArray();
+            return new string(chars);
         }
 
-        public void PopulateKeywords(Models.FileItem fileItem, IEnumerable<string> customKeywords, IEnumerable<string> fitsKeywords, bool skipXisf, bool calculateMedian)
+        private static bool IsArwFile(string filePath)
+        {
+            return string.Equals(System.IO.Path.GetExtension(filePath), ".arw", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static Dictionary<string, string> BuildArwMetadataMap(IEnumerable<MetadataExtractor.Directory> directories)
+        {
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var directory in directories)
+            {
+                foreach (var tag in directory.Tags)
+                {
+                    if (string.IsNullOrWhiteSpace(tag.Name))
+                        continue;
+
+                    string description = tag.Description ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(description))
+                        continue;
+
+                    var normalizedTagName = NormalizeMetadataKey(tag.Name);
+                    if (!map.ContainsKey(normalizedTagName))
+                    {
+                        map[normalizedTagName] = description;
+                    }
+                }
+            }
+
+            return map;
+        }
+
+        private static readonly Dictionary<string, string[]> ArwAliasMap = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Make"] = new[] { "Make" },
+            ["Model"] = new[] { "Model" },
+            ["LensModel"] = new[] { "Lens Model" },
+            ["FocalLength"] = new[] { "Focal Length" },
+            ["FNumber"] = new[] { "F-Number", "Aperture Value" },
+            ["ISO"] = new[] { "ISO Speed Ratings", "Photographic Sensitivity", "ISO" },
+            ["ExposureTime"] = new[] { "Exposure Time", "Shutter Speed Value" },
+            ["DateTimeOriginal"] = new[] { "Date/Time Original" },
+            ["WhiteBalance"] = new[] { "White Balance" },
+            ["Orientation"] = new[] { "Orientation" },
+            ["ColorSpace"] = new[] { "Color Space" },
+            ["ExposureCompensation"] = new[] { "Exposure Bias Value", "Exposure Compensation" },
+            ["Width"] = new[] { "Image Width", "Exif Image Width" },
+            ["Height"] = new[] { "Image Height", "Exif Image Height" },
+            ["BitDepth"] = new[] { "Bits Per Sample", "Bit Depth" },
+            ["BlackLevel"] = new[] { "Black Level" },
+            ["WhiteLevel"] = new[] { "White Level" }
+        };
+
+        private static IEnumerable<string> BuildArwAliasKeys(string requestedKeyword)
+        {
+            // Always include the canonical keyword itself as the first lookup candidate.
+            yield return NormalizeMetadataKey(requestedKeyword);
+
+            if (ArwAliasMap.TryGetValue(requestedKeyword, out var aliases))
+            {
+                foreach (var alias in aliases)
+                {
+                    yield return NormalizeMetadataKey(alias);
+                }
+            }
+        }
+
+
+
+        public void PopulateKeywords(Models.FileItem fileItem, IEnumerable<string> customKeywords, IEnumerable<string> fitsKeywords, bool skipXisf = false, IEnumerable<string>? arwKeywords = null)
+        {
+            PopulateKeywords(fileItem, customKeywords, fitsKeywords, skipXisf, calculateMedian: false, arwKeywords: arwKeywords);
+        }
+
+        public void PopulateKeywords(Models.FileItem fileItem, IEnumerable<string> customKeywords, IEnumerable<string> fitsKeywords, bool skipXisf, bool calculateMedian, IEnumerable<string>? arwKeywords = null)
         {
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             
@@ -189,6 +307,11 @@ namespace ApexAstro.Wpf.Services
                     System.Diagnostics.Debug.WriteLine($"Extracted {extractedFits.Count} FITS keywords from {fileItem.Name}");
                 }
             }
+
+            if (arwKeywords != null && arwKeywords.Any())
+            {
+                fileItem.ArwKeywords = ExtractArwKeywords(fileItem.Path, arwKeywords);
+            }
             
             // Calculate median and mean values for the image (only if requested)
             if (calculateMedian)
@@ -205,11 +328,12 @@ namespace ApexAstro.Wpf.Services
             var elapsed = stopwatch.ElapsedMilliseconds;
             var customCount = fileItem.CustomKeywords?.Count ?? 0;
             var fitsCount = fileItem.FitsKeywords?.Count ?? 0;
+            var arwCount = fileItem.ArwKeywords?.Count ?? 0;
             
             // Queue the log entry instead of writing synchronously
             System.Threading.Tasks.Task.Run(() => 
             {
-                App.LoggingService?.LogInfo($"Loaded metadata: {fileItem.Name} ({ext}) in {elapsed}ms - {customCount} custom, {fitsCount} FITS keywords");
+                App.LoggingService?.LogInfo($"Loaded metadata: {fileItem.Name} ({ext}) in {elapsed}ms - {customCount} custom, {fitsCount} FITS, {arwCount} ARW keywords");
             });
         }
 

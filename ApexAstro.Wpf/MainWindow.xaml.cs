@@ -152,7 +152,11 @@ namespace ApexAstro.Wpf
             _viewModel.ZoomActualRequested += () => CenterImageAfterZoom();
             
             // Wire up files loaded event to auto-resize columns
-            _viewModel.FilesLoaded += () => _listViewColumnService?.AutoResizeColumns();
+            _viewModel.FilesLoaded += () =>
+            {
+                _listViewColumnService?.UpdateListViewColumns();
+                _listViewColumnService?.AutoResizeColumns();
+            };
             
             // Wire up auto-stretch changed event to refresh current image
             _viewModel.AutoStretchChanged += () =>
@@ -474,6 +478,9 @@ namespace ApexAstro.Wpf
                 var step4Start = totalStopwatch.ElapsedMilliseconds;
                 if (_listViewColumnService != null)
                 {
+                    // Rebuild columns after metadata is populated so hide-unused checks
+                    // run against real values instead of the initial empty dictionaries.
+                    _listViewColumnService.UpdateListViewColumns();
                     _listViewColumnService.AutoResizeColumns();
                 }
                 var step4Time = totalStopwatch.ElapsedMilliseconds - step4Start;
@@ -1282,10 +1289,11 @@ namespace ApexAstro.Wpf
                 return; // Exit early since there's nothing to display
             }
 
+            bool hadImageBeforeLoad = DisplayImage.Source != null;
+
             // Capture current zoom state before loading the new image so it can be restored
             bool previousFitMode = _viewModel.FitMode;
             double previousZoomLevel = _viewModel.ZoomLevel;
-            double previousFitScale = _viewModel.FitScale;
 
             // Get the currently selected file from the ViewModel's Files collection
             var file = _viewModel.Files[_viewModel.SelectedIndex];
@@ -1336,26 +1344,27 @@ namespace ApexAstro.Wpf
                         // This helps avoid timing issues where the ScrollViewer might not be sized yet
                         Dispatcher.BeginInvoke(new Action(() =>
                         {
-                            if (previousFitMode || DisplayImage.Source == null)
+                            if (!hadImageBeforeLoad)
                             {
-                                // Was in fit mode (or first image): fit the new image to the window
-                                _viewModel.FitMode = true;
-                                FitImageToScrollViewer();
+                                // Initial load path: keep prior behavior for first render.
+                                if (previousFitMode)
+                                {
+                                    _viewModel.FitMode = true;
+                                    FitImageToScrollViewer();
+                                }
+                                else
+                                {
+                                    _viewModel.FitMode = false;
+                                    _viewModel.ZoomLevel = Math.Max(0.01, Math.Min(5.0, previousZoomLevel));
+                                    CenterImageInScrollViewer();
+                                }
                             }
                             else
                             {
-                                // Was in manual zoom: restore the same zoom ratio relative to the
-                                // previous fit scale so the image appears at the same visual size.
-                                // If fit scales differ (different image dimensions) we adjust
-                                // proportionally so the zoom feels consistent.
-                                CalculateAndApplyFitScale();
-                                double newFitScale = _viewModel.FitScale;
-                                double restoredZoom = (previousFitScale > 0.0001)
-                                    ? previousZoomLevel * (newFitScale / previousFitScale)
-                                    : previousZoomLevel;
-                                restoredZoom = Math.Max(0.01, Math.Min(5.0, restoredZoom));
-                                _viewModel.FitMode = false;
-                                _viewModel.ZoomLevel = restoredZoom;
+                                // Navigation/play path: lock scale to the exact user-selected level
+                                // so stepping through images never changes zoom unexpectedly.
+                                _viewModel.FitMode = previousFitMode;
+                                _viewModel.ZoomLevel = Math.Max(0.01, Math.Min(5.0, previousZoomLevel));
                                 CenterImageInScrollViewer();
                             }
                             System.Diagnostics.Debug.WriteLine($"Image loaded, fitMode={_viewModel.FitMode}, zoom={_viewModel.ZoomLevel}");
@@ -2656,6 +2665,7 @@ namespace ApexAstro.Wpf
                 HistogramControl.Visibility = Visibility.Visible;
                 // Restore row heights
                 HistogramSplitterRow.Height = GridLength.Auto;
+                HistogramRow.MinHeight = 100;
                 HistogramRow.Height = new GridLength(200, GridUnitType.Pixel);
             }
             else
@@ -2665,6 +2675,7 @@ namespace ApexAstro.Wpf
                 HistogramControl.Visibility = Visibility.Collapsed;
                 // Collapse rows completely to prevent grey areas
                 HistogramSplitterRow.Height = new GridLength(0, GridUnitType.Pixel);
+                HistogramRow.MinHeight = 0;
                 HistogramRow.Height = new GridLength(0, GridUnitType.Pixel);
             }
         }

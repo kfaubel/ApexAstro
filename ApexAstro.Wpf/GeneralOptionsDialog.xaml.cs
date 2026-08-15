@@ -66,6 +66,11 @@ namespace ApexAstro.Wpf
         public bool ShowHistogram { get; set; }
 
         /// <summary>
+        /// Property to track whether metadata columns with no values should be hidden.
+        /// </summary>
+        public bool HideUnusedMetadataColumns { get; set; }
+
+        /// <summary>
         /// Property to track whether to scan XISF files for FITS keywords.
         /// </summary>
         public bool ScanXisfForFitsKeywords { get; set; }
@@ -100,6 +105,11 @@ namespace ApexAstro.Wpf
         /// Event raised when user clicks the CSV Keywords button.
         /// </summary>
         public event Action? CsvKeywordsRequested;
+
+        /// <summary>
+        /// Event raised when user clicks the ARW Metadata button.
+        /// </summary>
+        public event Action? ArwKeywordsRequested;
 
         /// <summary>
         /// Event raised when user applies a reset preset.
@@ -137,7 +147,7 @@ namespace ApexAstro.Wpf
         /// <param name="scanXisfForFitsKeywords">Current value of the ScanXisfForFitsKeywords setting</param>
         /// <param name="medianDisplayMode">Current median display mode setting</param>
         /// <param name="showHistogram">Current value of the ShowHistogram setting</param>
-        public GeneralOptionsDialog(bool showSizeColumn, bool showFullFilename, bool showFilenameDateColumn, bool showFilenameTimeColumn, bool showFilenameFrameColumn, bool showMedianColumn, ThemeMode theme, bool showFullScreenHelp, double playPauseInterval, bool scanXisfForFitsKeywords, MedianDisplayMode medianDisplayMode, bool showHistogram) : this()
+        public GeneralOptionsDialog(bool showSizeColumn, bool showFullFilename, bool showFilenameDateColumn, bool showFilenameTimeColumn, bool showFilenameFrameColumn, bool showMedianColumn, ThemeMode theme, bool showFullScreenHelp, double playPauseInterval, bool scanXisfForFitsKeywords, MedianDisplayMode medianDisplayMode, bool showHistogram, bool hideUnusedMetadataColumns) : this()
         {
             // Store the initial values in our properties
             ShowSizeColumn = showSizeColumn;
@@ -152,6 +162,7 @@ namespace ApexAstro.Wpf
             ScanXisfForFitsKeywords = scanXisfForFitsKeywords;
             MedianDisplayMode = medianDisplayMode;
             ShowHistogram = showHistogram;
+            HideUnusedMetadataColumns = hideUnusedMetadataColumns;
             
             // Set the checkbox state to match the current setting
             // ShowSizeColumnCheckBox is a UI control defined in the XAML file
@@ -160,6 +171,7 @@ namespace ApexAstro.Wpf
             ShowFilenameTimeColumnCheckBox.IsChecked = showFilenameTimeColumn;
             ShowFilenameFrameColumnCheckBox.IsChecked = ShowFilenameFrameColumn;
             ShowSizeColumnCheckBox.IsChecked = showSizeColumn;
+            HideUnusedMetadataColumnsCheckBox.IsChecked = hideUnusedMetadataColumns;
             ShowMedianColumnCheckBox.IsChecked = showMedianColumn;
             ScanXisfForFitsKeywordsCheckBox.IsChecked = scanXisfForFitsKeywords;
             ShowHistogramCheckBox.IsChecked = showHistogram;
@@ -235,6 +247,14 @@ namespace ApexAstro.Wpf
         private void CsvKeywordsButton_Click(object sender, RoutedEventArgs e)
         {
             CsvKeywordsRequested?.Invoke();
+        }
+
+        /// <summary>
+        /// Event handler for the ARW Metadata button click.
+        /// </summary>
+        private void ArwKeywordsButton_Click(object sender, RoutedEventArgs e)
+        {
+            ArwKeywordsRequested?.Invoke();
         }
 
         /// <summary>
@@ -315,6 +335,7 @@ namespace ApexAstro.Wpf
             ShowMedianColumn = ShowMedianColumnCheckBox.IsChecked ?? false;
             ScanXisfForFitsKeywords = ScanXisfForFitsKeywordsCheckBox.IsChecked ?? false;
             ShowHistogram = ShowHistogramCheckBox.IsChecked ?? false;
+            HideUnusedMetadataColumns = HideUnusedMetadataColumnsCheckBox.IsChecked ?? false;
             
             // Read the median display mode from radio buttons
             MedianDisplayMode = (MedianNormalizedRadioButton.IsChecked ?? true) 

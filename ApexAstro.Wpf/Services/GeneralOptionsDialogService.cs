@@ -6,7 +6,7 @@ namespace ApexAstro.Wpf.Services
 {
     public class GeneralOptionsDialogService : IGeneralOptionsDialogService
     {
-        public (bool? showSizeColumn, bool? showFullFilename, bool? showFilenameDateColumn, bool? showFilenameTimeColumn, bool? ShowFilenameFrameColumn, bool? showMedianColumn, ThemeMode? theme, bool? showFullScreenHelp, double? playPauseInterval, bool? scanXisfForFitsKeywords, MedianDisplayMode? medianDisplayMode, bool? showHistogram, List<string>? fitsKeywords, List<string>? customKeywords, List<string>? csvKeywords) ShowGeneralOptionsDialog(
+        public (bool? showSizeColumn, bool? showFullFilename, bool? showFilenameDateColumn, bool? showFilenameTimeColumn, bool? ShowFilenameFrameColumn, bool? showMedianColumn, ThemeMode? theme, bool? showFullScreenHelp, double? playPauseInterval, bool? scanXisfForFitsKeywords, MedianDisplayMode? medianDisplayMode, bool? showHistogram, bool? hideUnusedMetadataColumns, List<string>? fitsKeywords, List<string>? customKeywords, List<string>? csvKeywords, List<string>? arwKeywords) ShowGeneralOptionsDialog(
             bool currentShowSizeColumn,
             bool currentShowFullFilename,
             bool currentShowFilenameDateColumn,
@@ -19,16 +19,19 @@ namespace ApexAstro.Wpf.Services
             bool currentScanXisfForFitsKeywords,
             MedianDisplayMode currentMedianDisplayMode,
             bool currentShowHistogram,
+            bool currentHideUnusedMetadataColumns,
             IEnumerable<string> currentFitsKeywords,
             IEnumerable<string> currentCustomKeywords,
-            IEnumerable<string> currentCsvKeywords)
+            IEnumerable<string> currentCsvKeywords,
+            IEnumerable<string> currentArwKeywords)
         {
             // Track keyword changes from sub-dialogs
             List<string>? newFitsKeywords = null;
             List<string>? newCustomKeywords = null;
             List<string>? newCsvKeywords = null;
+            List<string>? newArwKeywords = null;
 
-            var dialog = new GeneralOptionsDialog(currentShowSizeColumn, currentShowFullFilename, currentShowFilenameDateColumn, currentShowFilenameTimeColumn, currentShowFilenameFrameColumn, currentShowMedianColumn, currentTheme, currentShowFullScreenHelp, currentPlayPauseInterval, currentScanXisfForFitsKeywords, currentMedianDisplayMode, currentShowHistogram);
+            var dialog = new GeneralOptionsDialog(currentShowSizeColumn, currentShowFullFilename, currentShowFilenameDateColumn, currentShowFilenameTimeColumn, currentShowFilenameFrameColumn, currentShowMedianColumn, currentTheme, currentShowFullScreenHelp, currentPlayPauseInterval, currentScanXisfForFitsKeywords, currentMedianDisplayMode, currentShowHistogram, currentHideUnusedMetadataColumns);
             
             // Wire up the FITS Keywords button
             dialog.FitsKeywordsRequested += () =>
@@ -68,25 +71,38 @@ namespace ApexAstro.Wpf.Services
                 }
             };
 
+            dialog.ArwKeywordsRequested += () =>
+            {
+                var arwDialog = new ArwKeywordsDialog(currentArwKeywords);
+                arwDialog.Owner = dialog;
+                if (arwDialog.ShowDialog() == true)
+                {
+                    newArwKeywords = arwDialog.GetSelectedKeywords();
+                    currentArwKeywords = newArwKeywords;
+                }
+            };
+
             dialog.ResetPresetRequested += preset =>
             {
-                var (fitsKeywords, customKeywords, csvKeywords) = GetKeywordsForPreset(preset);
+                var (fitsKeywords, customKeywords, csvKeywords, arwKeywords) = GetKeywordsForPreset(preset);
                 newFitsKeywords = fitsKeywords;
                 currentFitsKeywords = fitsKeywords;
                 newCustomKeywords = customKeywords;
                 newCsvKeywords = csvKeywords;
+                newArwKeywords = arwKeywords;
                 currentCustomKeywords = customKeywords;
                 currentCsvKeywords = csvKeywords;
+                currentArwKeywords = arwKeywords;
             };
             
             if (dialog.ShowDialog() == true)
             {
-                return (dialog.ShowSizeColumn, dialog.ShowFullFilename, dialog.ShowFilenameDateColumn, dialog.ShowFilenameTimeColumn, dialog.ShowFilenameFrameColumn, dialog.ShowMedianColumn, dialog.SelectedTheme, dialog.ShowFullScreenHelp, dialog.PlayPauseInterval, dialog.ScanXisfForFitsKeywords, dialog.MedianDisplayMode, dialog.ShowHistogram, newFitsKeywords, newCustomKeywords, newCsvKeywords);
+                return (dialog.ShowSizeColumn, dialog.ShowFullFilename, dialog.ShowFilenameDateColumn, dialog.ShowFilenameTimeColumn, dialog.ShowFilenameFrameColumn, dialog.ShowMedianColumn, dialog.SelectedTheme, dialog.ShowFullScreenHelp, dialog.PlayPauseInterval, dialog.ScanXisfForFitsKeywords, dialog.MedianDisplayMode, dialog.ShowHistogram, dialog.HideUnusedMetadataColumns, newFitsKeywords, newCustomKeywords, newCsvKeywords, newArwKeywords);
             }
-            return (null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+            return (null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
         }
 
-        private static (List<string> fitsKeywords, List<string> customKeywords, List<string> csvKeywords) GetKeywordsForPreset(SettingsResetPreset preset)
+        private static (List<string> fitsKeywords, List<string> customKeywords, List<string> csvKeywords, List<string> arwKeywords) GetKeywordsForPreset(SettingsResetPreset preset)
         {
             switch (preset)
             {
@@ -94,16 +110,18 @@ namespace ApexAstro.Wpf.Services
                     return (
                         new List<string> { "EXPOSURE", "FILTER", "CCD-TEMP", "IMAGETYP" },
                         new List<string> { "RMS", "HFR", "ECC", "Stars" },
+                        new List<string>(),
                         new List<string>());
 
                 case SettingsResetPreset.Asiair:
                     return (
                         new List<string> { "EXPOSURE", "CCD_TEMP", "IMAGETYP" },
                         new List<string>(),
+                        new List<string>(),
                         new List<string>());
 
                 default:
-                    return (new List<string>(), new List<string>(), new List<string>());
+                    return (new List<string>(), new List<string>(), new List<string>(), new List<string>());
             }
         }
     }

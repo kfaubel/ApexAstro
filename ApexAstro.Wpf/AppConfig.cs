@@ -64,6 +64,12 @@ namespace ApexAstro.Wpf
         /// These are fields from the ImageMetaData.csv file in the current image folder.
         /// </summary>
         public List<string> CsvKeywords { get; set; } = new List<string>();
+
+        /// <summary>
+        /// List of ARW metadata fields to display as columns (e.g., "ISO", "ExposureTime", "LensModel").
+        /// These are extracted from ARW EXIF and MakerNote metadata.
+        /// </summary>
+        public List<string> ArwKeywords { get; set; } = new List<string>();
         
         /// <summary>
         /// Whether to show the file size column in the file list.
@@ -112,6 +118,12 @@ namespace ApexAstro.Wpf
         /// Default is false to keep the interface cleaner.
         /// </summary>
         public bool ShowHistogram { get; set; } = false;
+
+        /// <summary>
+        /// Whether to hide metadata columns that have no values in the current file list.
+        /// Applies to custom, FITS, session CSV, and ARW metadata columns.
+        /// </summary>
+        public bool HideUnusedMetadataColumns { get; set; } = false;
         
         /// <summary>
         /// Whether to scan XISF files for FITS keywords.
