@@ -12,7 +12,7 @@ namespace ApexAstro.Wpf.Converters
     /// 
     /// Special handling:
     /// - RMS: Shows "---" if value is "0" or "0.0"
-    /// - ECC: Shows "---" if value is "NaN" (case-insensitive)
+    /// - Any NaN value is displayed as 0
     /// </summary>
     public class SafeDictionaryConverter : IValueConverter
     {
@@ -42,6 +42,12 @@ namespace ApexAstro.Wpf.Converters
                 // If we have a value, apply special formatting rules
                 if (displayValue != null)
                 {
+                    if (displayValue.Equals("NaN", StringComparison.OrdinalIgnoreCase) ||
+                        (double.TryParse(displayValue, out double numericValue) && double.IsNaN(numericValue)))
+                    {
+                        return "0";
+                    }
+
                     // Special handling for RMS: show "---" if value is 0
                     if (key.Equals("RMS", StringComparison.OrdinalIgnoreCase))
                     {
@@ -51,16 +57,6 @@ namespace ApexAstro.Wpf.Converters
                             {
                                 return "---";
                             }
-                        }
-                        return displayValue;
-                    }
-
-                    // Special handling for ECC: show "---" if value is NaN
-                    if (key.Equals("ECC", StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (displayValue.Equals("NaN", StringComparison.OrdinalIgnoreCase))
-                        {
-                            return "---";
                         }
                         return displayValue;
                     }

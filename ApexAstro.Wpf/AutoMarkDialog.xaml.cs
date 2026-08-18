@@ -96,13 +96,13 @@ namespace ApexAstro.Wpf
                     break;
                 case "ECC":
                     vm.IsEnabled = true;
-                    vm.MinValue = "0";
+                    vm.MinValue = "0.01";
                     vm.MaxValue = "0.65";
                     vm.AllowBlank = true;  // ECC can be NaN
                     break;
                 case "HFR":
                     vm.IsEnabled = true;
-                    vm.MinValue = "0";
+                    vm.MinValue = "0.01";
                     vm.MaxValue = "2.0";
                     vm.AllowBlank = false;
                     break;

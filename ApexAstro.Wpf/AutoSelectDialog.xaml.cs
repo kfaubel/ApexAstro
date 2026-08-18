@@ -30,7 +30,7 @@ namespace ApexAstro.Wpf
                 switch (keyword.ToUpperInvariant())
                 {
                     case "RMS":
-                        vm.MinValue = "";
+                        vm.MinValue = "0.01";
                         vm.MaxValue = "1.2";
                         break;
                     case "STARS":
@@ -38,11 +38,11 @@ namespace ApexAstro.Wpf
                         vm.MaxValue = "";
                         break;
                     case "ECC":
-                        vm.MinValue = "";
+                        vm.MinValue = "0.01";
                         vm.MaxValue = "0.6";
                         break;
                     case "HFR":
-                        vm.MinValue = "";
+                        vm.MinValue = "0.01";
                         vm.MaxValue = "3.0";
                         break;
                     default:
