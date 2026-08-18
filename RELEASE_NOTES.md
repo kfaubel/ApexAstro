@@ -1,3 +1,8 @@
+## v1.11.1 - 2026-08-18
+
+* Show custom keywords with NaN as 0
+* Change auto select default minimum to 0.01 for RMS, HFR and ECC to mark values marked as NaN in the filename
+
 # Release Notes
 
 ## v1.11.0 - 2026-08-15
