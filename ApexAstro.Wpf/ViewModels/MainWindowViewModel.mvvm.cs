@@ -858,22 +858,65 @@ namespace ApexAstro.Wpf.ViewModels
             return System.IO.Path.Combine(directoryPath, LegacyReviewedMarkerFileNameV1);
         }
 
+        private System.Collections.Generic.List<string> GetReviewedDirectories()
+        {
+            if (string.IsNullOrWhiteSpace(CurrentDirectory) || !System.IO.Directory.Exists(CurrentDirectory))
+                return new System.Collections.Generic.List<string>();
+
+            var dataRoot = ResolveDataDirectory(CurrentDirectory);
+            if (!string.IsNullOrEmpty(dataRoot))
+            {
+                return System.IO.Directory.EnumerateDirectories(dataRoot)
+                    .Where(IsNightDirectory)
+                    .SelectMany(nightPath => System.IO.Directory.EnumerateDirectories(nightPath)
+                        .Where(lightPath => string.Equals(System.IO.Path.GetFileName(lightPath), "LIGHT", StringComparison.OrdinalIgnoreCase)))
+                    .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+
+            return new System.Collections.Generic.List<string> { CurrentDirectory };
+        }
+
+        private static string? ResolveDataDirectory(string directory)
+        {
+            if (string.IsNullOrWhiteSpace(directory) || !System.IO.Directory.Exists(directory))
+                return null;
+
+            if (string.Equals(System.IO.Path.GetFileName(directory), "Data", StringComparison.OrdinalIgnoreCase))
+                return directory;
+
+            return System.IO.Directory.EnumerateDirectories(directory, "*", System.IO.SearchOption.TopDirectoryOnly)
+                .FirstOrDefault(path => string.Equals(System.IO.Path.GetFileName(path), "Data", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static bool IsNightDirectory(string directoryPath)
+        {
+            var name = System.IO.Path.GetFileName(directoryPath);
+            if (string.IsNullOrWhiteSpace(name) || !name.StartsWith("NIGHT_", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            var datePart = name.Substring("NIGHT_".Length);
+            return DateTime.TryParseExact(datePart, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _);
+        }
+
         private void LoadDirectoryReviewedState()
         {
             bool reviewed = false;
-            if (!string.IsNullOrWhiteSpace(CurrentDirectory) && System.IO.Directory.Exists(CurrentDirectory))
+            var reviewDirectories = GetReviewedDirectories();
+
+            if (reviewDirectories.Count > 0)
             {
-                string markerPath = GetReviewedMarkerFilePath(CurrentDirectory);
-                if (System.IO.File.Exists(markerPath))
+                reviewed = reviewDirectories.All(directoryPath =>
                 {
-                    reviewed = TryReadReviewedMarker(markerPath, out _);
-                }
-                else
-                {
-                    string legacyMarkerPath = GetLegacyReviewedMarkerFilePath(CurrentDirectory);
+                    string markerPath = GetReviewedMarkerFilePath(directoryPath);
+                    if (System.IO.File.Exists(markerPath))
+                    {
+                        return TryReadReviewedMarker(markerPath, out _);
+                    }
+
+                    string legacyMarkerPath = GetLegacyReviewedMarkerFilePath(directoryPath);
                     if (System.IO.File.Exists(legacyMarkerPath))
                     {
-                        reviewed = true;
                         try
                         {
                             WriteReviewedMarker(markerPath);
@@ -881,27 +924,30 @@ namespace ApexAstro.Wpf.ViewModels
                         }
                         catch (Exception ex)
                         {
-                            _loggingService.LogError("Directory Review State", $"Failed to migrate legacy review marker in {CurrentDirectory}", ex);
+                            _loggingService.LogError("Directory Review State", $"Failed to migrate legacy review marker in {directoryPath}", ex);
                         }
+
+                        return true;
                     }
-                    else
+
+                    string legacyMarkerPathV1 = GetLegacyReviewedMarkerFilePathV1(directoryPath);
+                    if (System.IO.File.Exists(legacyMarkerPathV1))
                     {
-                        string legacyMarkerPathV1 = GetLegacyReviewedMarkerFilePathV1(CurrentDirectory);
-                        if (System.IO.File.Exists(legacyMarkerPathV1))
+                        try
                         {
-                            reviewed = true;
-                            try
-                            {
-                                WriteReviewedMarker(markerPath);
-                                System.IO.File.Delete(legacyMarkerPathV1);
-                            }
-                            catch (Exception ex)
-                            {
-                                _loggingService.LogError("Directory Review State", $"Failed to migrate legacy review marker in {CurrentDirectory}", ex);
-                            }
+                            WriteReviewedMarker(markerPath);
+                            System.IO.File.Delete(legacyMarkerPathV1);
                         }
+                        catch (Exception ex)
+                        {
+                            _loggingService.LogError("Directory Review State", $"Failed to migrate legacy review marker in {directoryPath}", ex);
+                        }
+
+                        return true;
                     }
-                }
+
+                    return false;
+                });
             }
 
             _isLoadingDirectoryReviewedState = true;
@@ -925,16 +971,23 @@ namespace ApexAstro.Wpf.ViewModels
             if (!CanMarkDirectoryReviewed)
                 return;
 
-            string markerPath = GetReviewedMarkerFilePath(CurrentDirectory);
+            var reviewDirectories = GetReviewedDirectories();
+            if (reviewDirectories.Count == 0)
+                return;
+
             try
             {
-                if (IsDirectoryReviewed)
+                foreach (var directoryPath in reviewDirectories)
                 {
-                    WriteReviewedMarker(markerPath);
-                }
-                else if (System.IO.File.Exists(markerPath))
-                {
-                    System.IO.File.Delete(markerPath);
+                    string markerPath = GetReviewedMarkerFilePath(directoryPath);
+                    if (IsDirectoryReviewed)
+                    {
+                        WriteReviewedMarker(markerPath);
+                    }
+                    else if (System.IO.File.Exists(markerPath))
+                    {
+                        System.IO.File.Delete(markerPath);
+                    }
                 }
             }
             catch (Exception ex)
@@ -1549,42 +1602,12 @@ namespace ApexAstro.Wpf.ViewModels
 
         private static string ResolveFolderForImageLoad(string folderPath)
         {
-            if (string.IsNullOrWhiteSpace(folderPath) || !System.IO.Directory.Exists(folderPath))
-                return folderPath;
+            return FileManagementService.ResolveDirectoryForLoad(folderPath);
+        }
 
-            string current = folderPath;
-
-            // Walk through wrapper folders like night_1/LIGHT where parent has no files
-            // and exactly one child directory.
-            for (int depth = 0; depth < 10; depth++)
-            {
-                bool hasFiles = System.IO.Directory.EnumerateFiles(current).Any();
-                if (hasFiles)
-                    break;
-
-                var subdirectories = System.IO.Directory
-                    .EnumerateDirectories(current)
-                    .Where(path =>
-                    {
-                        try
-                        {
-                            var attrs = System.IO.File.GetAttributes(path);
-                            return (attrs & System.IO.FileAttributes.Hidden) == 0 && (attrs & System.IO.FileAttributes.System) == 0;
-                        }
-                        catch
-                        {
-                            return false;
-                        }
-                    })
-                    .ToArray();
-
-                if (subdirectories.Length != 1)
-                    break;
-
-                current = subdirectories[0];
-            }
-
-            return current;
+        private static bool ContainsSupportedFiles(string directory)
+        {
+            return FileManagementService.ResolveDirectoryForLoad(directory) == directory;
         }
         
         /// <summary>
@@ -1946,6 +1969,46 @@ namespace ApexAstro.Wpf.ViewModels
                     System.Windows.MessageBox.Show($"Error moving files: {ex.Message}", 
                         "Move Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.None);
                 }
+            }
+        }
+
+        public void DeleteSelectedFilesToRecycleBin()
+        {
+            var selectedFiles = Files.Where(f => f.IsSelected).ToList();
+            if (!selectedFiles.Any())
+                return;
+
+            try
+            {
+                if (SelectedIndex >= 0 && SelectedIndex < Files.Count)
+                {
+                    var currentFile = Files[SelectedIndex];
+                    if (selectedFiles.Contains(currentFile))
+                    {
+                        ClearImageRequested?.Invoke();
+                    }
+                }
+
+                _fileManagementService.MoveSelectedFiles(selectedFiles, string.Empty, true);
+
+                for (int i = Files.Count - 1; i >= 0; i--)
+                {
+                    if (Files[i].IsSelected)
+                    {
+                        Files.RemoveAt(i);
+                    }
+                }
+
+                OnPropertyChanged(nameof(HasSelectedFiles));
+                OnPropertyChanged(nameof(FileSelectionStatusText));
+                OnPropertyChanged(nameof(StatusBarText));
+
+                ShowAutoClosingMessage($"Successfully deleted {selectedFiles.Count} file(s).", "Delete Complete");
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show($"Error deleting files: {ex.Message}",
+                    "Delete Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.None);
             }
         }
 

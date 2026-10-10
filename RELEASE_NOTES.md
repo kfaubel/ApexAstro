@@ -5,6 +5,11 @@
 
 # Release Notes
 
+## V 1.12 - 2026-10-09
+* Reworked the menu bar for better navigation and usability.
+* Support added for selecting multiple nights of images and reviewing them collectively.
+* Automatically highlight and mark images that do not meet the quality criteria.
+
 ## v1.11.0 - 2026-08-15
 
 * Added support for Sony ARW files including the ability to show ARW metadata in the file list.
@@ -13,7 +18,7 @@
 ## v1.10.0
 
 * Added (experimental) SNR analysis to help predict how much data is required to reach
-the quality target for a project.
+the quality target for a project.  Since removed for now.
 * Minor bug fixes
 * UI tweaks based on user feedback
 

@@ -1,4 +1,5 @@
 using Xunit;
+using ApexAstro.Wpf;
 using ApexAstro.Wpf.Services;
 using ApexAstro.Wpf.Models;
 using System;
@@ -294,6 +295,127 @@ namespace ApexAstro.Tests
             Assert.NotNull(xisfFiles);
         }
         
+        [Fact]
+        public void LoadFilesFromDirectory_UsesDataAggregationWhenDataFolderExists()
+        {
+            var tempRoot = Path.Combine(Path.GetTempPath(), "ApexAstroTest_DataAggregate_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempRoot);
+
+            try
+            {
+                var dataDir = Path.Combine(tempRoot, "Data");
+                var night1 = Path.Combine(dataDir, "NIGHT_2026-09-10");
+                var night2 = Path.Combine(dataDir, "NIGHT_2026-09-11");
+
+                Directory.CreateDirectory(Path.Combine(night1, "LIGHT"));
+                Directory.CreateDirectory(Path.Combine(night2, "LIGHT"));
+
+                var file1 = Path.Combine(night1, "LIGHT", "night1.fits");
+                var file2 = Path.Combine(night2, "LIGHT", "night2.xisf");
+                File.WriteAllText(file1, "fits");
+                File.WriteAllText(file2, "xisf");
+
+                var files = _service.LoadFilesFromDirectory(tempRoot);
+
+                Assert.Equal(2, files.Count);
+                Assert.Contains(files, f => f.Path == file1);
+                Assert.Contains(files, f => f.Path == file2);
+            }
+            finally
+            {
+                if (Directory.Exists(tempRoot))
+                    Directory.Delete(tempRoot, true);
+            }
+        }
+
+        [Fact]
+        public void LoadFilesFromDirectory_PrefersDirectFilesOverDataAggregation()
+        {
+            var tempRoot = Path.Combine(Path.GetTempPath(), "ApexAstroTest_DataPriority_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempRoot);
+
+            try
+            {
+                var directFile = Path.Combine(tempRoot, "direct.fits");
+                File.WriteAllText(directFile, "direct");
+
+                var dataDir = Path.Combine(tempRoot, "Data");
+                var nightDir = Path.Combine(dataDir, "NIGHT_2026-09-12");
+                Directory.CreateDirectory(Path.Combine(nightDir, "LIGHT"));
+                var dataFile = Path.Combine(nightDir, "LIGHT", "night.fits");
+                File.WriteAllText(dataFile, "night");
+
+                var files = _service.LoadFilesFromDirectory(tempRoot);
+
+                Assert.Single(files);
+                Assert.Equal(directFile, files[0].Path);
+            }
+            finally
+            {
+                if (Directory.Exists(tempRoot))
+                    Directory.Delete(tempRoot, true);
+            }
+        }
+
+        [Fact]
+        public void AutoSelectForegroundConverter_UsesSelectionRulesForCustomKeywords()
+        {
+            var file = new FileItem
+            {
+                Name = "sample.fits",
+                Path = "C:\\Temp\\sample.fits",
+                CustomKeywords = new Dictionary<string, string>
+                {
+                    ["HFR"] = "3.0",
+                    ["RMS"] = "1.1"
+                }
+            };
+
+            var criteria = new List<AutoSelectCriteriaSetting>
+            {
+                new AutoSelectCriteriaSetting
+                {
+                    Key = "HFR",
+                    IsEnabled = true,
+                    MaxValue = "2.5",
+                    AllowBlank = false
+                },
+                new AutoSelectCriteriaSetting
+                {
+                    Key = "RMS",
+                    IsEnabled = true,
+                    MaxValue = "1.5",
+                    AllowBlank = false
+                }
+            };
+
+            var converter = new ApexAstro.Wpf.Converters.AutoSelectRowForegroundConverter();
+            var redBrush = converter.Convert(
+                file,
+                typeof(System.Windows.Media.Brush),
+                new ApexAstro.Wpf.Converters.AutoSelectKeywordForegroundContext
+                {
+                    Keyword = "HFR",
+                    Criteria = criteria
+                },
+                System.Globalization.CultureInfo.InvariantCulture) as System.Windows.Media.Brush;
+
+            var greenBrush = converter.Convert(
+                file,
+                typeof(System.Windows.Media.Brush),
+                new ApexAstro.Wpf.Converters.AutoSelectKeywordForegroundContext
+                {
+                    Keyword = "RMS",
+                    Criteria = criteria
+                },
+                System.Globalization.CultureInfo.InvariantCulture) as System.Windows.Media.Brush;
+
+            Assert.NotNull(redBrush);
+            Assert.NotNull(greenBrush);
+            Assert.Equal(System.Windows.Media.Brushes.Red.Color, ((System.Windows.Media.SolidColorBrush)redBrush).Color);
+            Assert.Equal(System.Windows.Media.Brushes.Green.Color, ((System.Windows.Media.SolidColorBrush)greenBrush).Color);
+        }
+
         [Fact]
         public void MoveToRecycleBin_NonExistentFile_ReturnsFalse()
         {

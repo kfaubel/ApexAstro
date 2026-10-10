@@ -398,10 +398,15 @@ namespace ApexAstro.Wpf.Services
                 binding.ConverterParameter = keyword;
                 
                 factory.SetBinding(System.Windows.Controls.TextBlock.TextProperty, binding);
-                // Bind to theme resource so foreground color updates when theme changes
-                var foregroundBinding = new System.Windows.Data.Binding();
-                foregroundBinding.Source = System.Windows.Application.Current;
-                foregroundBinding.Path = new System.Windows.PropertyPath("Resources[ThemeAccentGreen]");
+                // Bind to the row-level auto-select state so custom keywords are red when the file would be selected
+                // and green when it would be kept.
+                var foregroundBinding = new System.Windows.Data.Binding(".");
+                foregroundBinding.Converter = new ApexAstro.Wpf.Converters.AutoSelectRowForegroundConverter();
+                foregroundBinding.ConverterParameter = new ApexAstro.Wpf.Converters.AutoSelectKeywordForegroundContext
+                {
+                    Keyword = keyword,
+                    Criteria = _appConfig.AutoSelectCriteria
+                };
                 factory.SetBinding(System.Windows.Controls.TextBlock.ForegroundProperty, foregroundBinding);
                 factory.SetValue(System.Windows.Controls.TextBlock.TextTrimmingProperty, System.Windows.TextTrimming.CharacterEllipsis);
                 // Calculate width based on actual data content - different for each keyword

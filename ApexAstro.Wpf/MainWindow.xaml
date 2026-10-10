@@ -22,98 +22,59 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
+
+        <!-- Menu Bar -->
+        <Menu Grid.Row="0"
+              Background="{DynamicResource ThemeToolbarBackground}"
+              Foreground="{DynamicResource ThemeForeground}">
+            <MenuItem Header="_File">
+                <MenuItem Header="Open Folder..."
+                          InputGestureText="Ctrl+Shift+O"
+                          Command="{Binding OpenFolderDialogCommand}"/>
+                <MenuItem x:Name="OpenRecentMenuItem"
+                          Header="Open Recent  >"
+                          SubmenuOpened="OpenRecentMenuItem_SubmenuOpened">
+                    <MenuItem Header="(No recent folders)" IsEnabled="False"/>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="Exit" Click="Exit_Click"/>
+            </MenuItem>
+
+            <MenuItem Header="_Options">
+                <MenuItem Header="General..." Command="{Binding ShowGeneralOptionsDialogCommand}"/>
+                <MenuItem Header="FITS Keywords..." Command="{Binding ShowFitsKeywordsDialogCommand}"/>
+                <MenuItem Header="Custom Keywords..." Command="{Binding ShowCustomKeywordsDialogCommand}"/>
+                <MenuItem Header="Session Metadata..." Click="SessionMetadataMenuItem_Click"/>
+                <Separator/>
+                <MenuItem Header="Quality Criteria..." Click="AutoSelectButton_Click"/>
+            </MenuItem>
+
+            <MenuItem Header="_View">
+                <MenuItem Header="Fit to Window" Command="{Binding FitToWindowCommand}"/>
+                <MenuItem Header="Zoom In" InputGestureText="Ctrl++" Command="{Binding ZoomInCommand}"/>
+                <MenuItem Header="Zoom Out" InputGestureText="Ctrl+-" Command="{Binding ZoomOutCommand}"/>
+                <MenuItem Header="Actual Size" Command="{Binding ZoomActualCommand}"/>
+                <Separator/>
+                <MenuItem Header="Graph..." Click="ShowGraph_Click"/>
+                <MenuItem Header="Toggle Histogram" Click="ToggleHistogramMenuItem_Click"/>
+                <Separator/>
+                <MenuItem Header="Full Screen" InputGestureText="F11" Command="{Binding EnterFullScreenCommand}"/>
+            </MenuItem>
+
+            <MenuItem Header="_Help">
+                <MenuItem Header="Documentation" Click="Documentation_Click"/>
+                <MenuItem Header="View Log" Click="ViewLog_Click"/>
+                <MenuItem Header="About" Click="About_Click"/>
+            </MenuItem>
+        </Menu>
         
         <!-- Toolbar -->
-        <Border Grid.Row="0" Background="{DynamicResource ThemeToolbarBackground}" BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="0,0,0,1" Padding="4,2">
+        <Border Grid.Row="1" Background="{DynamicResource ThemeToolbarBackground}" BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="0,0,0,1" Padding="4,2">
             <Grid>
-                <!-- Left-aligned buttons -->
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                    <!-- Open Folder Button with Dropdown -->
-                    <Button x:Name="OpenFolderButton" 
-                            Click="OpenRecentButton_Click"
-                            ToolTip="Open Folder (Ctrl+Shift+O)&#10;Browse for a folder or select from recent"
-                            Style="{StaticResource ToolbarButtonStyle}"
-                            Margin="2,0">
-                        <StackPanel Orientation="Horizontal">
-                            <Path Data="M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z" 
-                                  Fill="{DynamicResource ThemeButtonForeground}" 
-                                  Width="20" Height="20" 
-                                  Stretch="Uniform"/>
-                            <Path Data="M7,10L12,15L17,10H7Z" 
-                                  Fill="{DynamicResource ThemeButtonForeground}" 
-                                  Width="10" Height="10" 
-                                  Stretch="Uniform"
-                                  Margin="2,0,0,0"/>
-                        </StackPanel>
-                        <Button.ContextMenu>
-                            <ContextMenu x:Name="FolderMenuContextMenu">
-                                <!-- Open Folder menu item -->
-                                <MenuItem Header="Open Folder..." 
-                                          Command="{Binding PlacementTarget.DataContext.OpenFolderDialogCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                                    <MenuItem.Icon>
-                                        <Path Data="M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z" 
-                                              Fill="{DynamicResource ThemeForeground}" 
-                                              Width="16" Height="16" 
-                                              Stretch="Uniform"/>
-                                    </MenuItem.Icon>
-                                </MenuItem>
-                                
-                                <!-- Separator -->
-                                <Separator/>
-                                
-                                <!-- Recent folders header -->
-                                <MenuItem Header="Recent Folders" IsEnabled="False" FontWeight="SemiBold"/>
-                            </ContextMenu>
-                        </Button.ContextMenu>
-                    </Button>
-                    
-                    <!-- Separator -->
-                    <Rectangle Width="1" Fill="{DynamicResource ThemeBorderBrush}" Margin="6,4"/>
-                    
-                    <!-- Options Button -->
-                    <Button Command="{Binding ShowGeneralOptionsDialogCommand}" 
-                            ToolTip="Options&#10;Configure application settings"
-                            Style="{StaticResource ToolbarButtonStyle}"
-                            Margin="2,0">
-                        <Path Data="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z" 
-                              Fill="{DynamicResource ThemeButtonForeground}" 
-                              Width="20" Height="20" 
-                              Stretch="Uniform"/>
-                    </Button>
-                    
-                    <!-- Separator -->
-                    <Rectangle Width="1" Fill="{DynamicResource ThemeBorderBrush}" Margin="6,4"/>
-
-                    <!-- Graph Button -->
-                    <Button Click="ShowGraph_Click"
-                            ToolTip="Graph&#10;Plot file-list column data"
-                            Style="{StaticResource ToolbarButtonStyle}"
-                            Margin="2,0">
-                        <Path Data="M3,3V21H21V19H5V3H3M7,16L11,10L13,13L15,10L20,16H7Z"
-                              Fill="{DynamicResource ThemeButtonForeground}"
-                              Width="20" Height="20"
-                              Stretch="Uniform"/>
-                    </Button>
-
-                    <!-- Separator -->
-                    <Rectangle Width="1" Fill="{DynamicResource ThemeBorderBrush}" Margin="6,4"/>
-
-                    <!-- SNR Button -->
-                    <Button Name="ComputeSnrButtonToolbar"
-                            Command="{Binding ComputeSnrCommand}"
-                            ToolTip="SNR&#10;Compute SNR for the current folder"
-                            Style="{StaticResource ToolbarButtonStyle}"
-                            Margin="2,0">
-                        <Path Data="M3,17H6V13H3M8,17H11V7H8M13,17H16V10H13M18,17H21V4H18" 
-                              Fill="{DynamicResource ThemeButtonForeground}" 
-                              Width="20" Height="20" 
-                              Stretch="Uniform"/>
-                    </Button>
-                </StackPanel>
-                
                 <!-- Right-aligned buttons -->
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <!-- Re-dock Button (visible only when floating) -->
@@ -128,76 +89,12 @@
                               Width="20" Height="20" 
                               Stretch="Uniform"/>
                     </Button>
-
-                    <ToggleButton Margin="8,0,2,0"
-                                  VerticalAlignment="Center"
-                                  FontSize="14"
-                                  FontWeight="SemiBold"
-                                  IsChecked="{Binding IsDirectoryReviewed, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                  IsEnabled="{Binding CanMarkDirectoryReviewed}"
-                                  Content="{Binding DirectoryReviewedStatusText}"
-                                  ToolTip="Click to mark this folder as reviewed">
-                        <ToggleButton.Style>
-                            <Style TargetType="ToggleButton">
-                                <Setter Property="Background" Value="#1F6FEB" />
-                                <Setter Property="Foreground" Value="White" />
-                                <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
-                                <Setter Property="BorderThickness" Value="1" />
-                                <Setter Property="Padding" Value="12,6" />
-                                <Setter Property="Cursor" Value="Hand" />
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="ToggleButton">
-                                            <Border x:Name="border"
-                                                    Background="{TemplateBinding Background}"
-                                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                                    CornerRadius="3"
-                                                    SnapsToDevicePixels="True">
-                                                <ContentPresenter Margin="{TemplateBinding Padding}"
-                                                                  HorizontalAlignment="Center"
-                                                                  VerticalAlignment="Center"
-                                                                  RecognizesAccessKey="True"
-                                                                  TextElement.Foreground="{TemplateBinding Foreground}"/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource ThemeButtonBackgroundHover}" />
-                                                </Trigger>
-                                                <Trigger Property="IsPressed" Value="True">
-                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource ThemeButtonBackgroundPressed}" />
-                                                </Trigger>
-                                                <Trigger Property="IsChecked" Value="True">
-                                                    <Setter Property="Background" Value="#2E8B57" />
-                                                    <Setter Property="Foreground" Value="White" />
-                                                </Trigger>
-                                                <Trigger Property="IsEnabled" Value="False">
-                                                    <Setter Property="Opacity" Value="0.5" />
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
-                        </ToggleButton.Style>
-                    </ToggleButton>
-
-                    <!-- Help Button -->
-                    <Button Click="About_Click" 
-                            ToolTip="Help&#10;View application information and documentation"
-                            Style="{StaticResource ToolbarButtonStyle}"
-                            Margin="2,0">
-                        <Path Data="M15.07,11.25L14.17,12.17C13.45,12.89 13,13.5 13,15H11V14.5C11,13.39 11.45,12.39 12.17,11.67L13.41,10.41C13.78,10.05 14,9.55 14,9C14,7.89 13.1,7 12,7A2,2 0 0,0 10,9H8A4,4 0 0,1 12,5A4,4 0 0,1 16,9C16,9.88 15.64,10.67 15.07,11.25M13,19H11V17H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12C22,6.47 17.5,2 12,2Z" 
-                              Fill="{DynamicResource ThemeButtonForeground}" 
-                              Width="20" Height="20" 
-                              Stretch="Uniform"/>
-                    </Button>
                 </StackPanel>
             </Grid>
         </Border>
         
         <!-- Main Content Area -->
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Name="FileListColumn" Width="3*" MinWidth="200"/>
                 <ColumnDefinition Name="SplitterColumn" Width="Auto"/>
@@ -220,19 +117,19 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    
-                    <!-- Auto Select Button -->
-                    <Button Name="AutoSelectButton" Grid.Column="0" Content="Auto Select..." 
-                            Click="AutoSelectButton_Click" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,4,4,4" 
-                            ToolTip="Select by Criteria&#10;Mark files for deletion based on metadata thresholds"/>
+
+                    <!-- Delete Selected Button - Left Aligned -->
+                    <Button Name="DeleteSelectedButton" Grid.Column="0" Content="Delete marked" 
+                            Click="DeleteSelectedButton_Click" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,4,4,4"
+                            ToolTip="Delete Files&#10;Move selected files to the Recycle Bin" />
                     
                     <!-- Move Selected Button - Left Aligned -->
-                    <Button Name="MoveSelectedButton" Grid.Column="1" Content="Move selected..." 
+                    <Button Name="MoveSelectedButton" Grid.Column="1" Content="Move marked..." 
                             Click="MoveSelectedButton_Click" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,4,4,4"
                             ToolTip="Move Files&#10;Move marked files to a folder or the Recycle Bin" />
                     
                     <!-- Select All Button -->
-                    <Button Name="SelectAllButton" Grid.Column="2" Content="Select All" 
+                    <Button Name="SelectAllButton" Grid.Column="2" Content="Mark all" 
                             Click="SelectAllButton_Click" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,4,4,4" 
                             ToolTip="Select All (Ctrl+A)&#10;Select all files in the list"/>
                     
@@ -240,6 +137,61 @@
                     <Button Name="ClearAllButton" Grid.Column="3" Content="Clear All" 
                             Click="ClearAllButton_Click" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,4,8,4" 
                             ToolTip="Clear all selections"/>
+
+                        <ToggleButton Grid.Column="5"
+                                      HorizontalAlignment="Right"
+                                      Margin="8,0,2,0"
+                                      VerticalAlignment="Center"
+                                      FontSize="14"
+                                      FontWeight="SemiBold"
+                                      IsChecked="{Binding IsDirectoryReviewed, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      IsEnabled="{Binding CanMarkDirectoryReviewed}"
+                                      Content="{Binding DirectoryReviewedStatusText}"
+                                      ToolTip="Click to mark this folder as reviewed">
+                            <ToggleButton.Style>
+                                <Style TargetType="ToggleButton">
+                                    <Setter Property="Background" Value="#1F6FEB" />
+                                    <Setter Property="Foreground" Value="White" />
+                                    <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
+                                    <Setter Property="BorderThickness" Value="1" />
+                                    <Setter Property="Padding" Value="12,6" />
+                                    <Setter Property="Cursor" Value="Hand" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ToggleButton">
+                                                <Border x:Name="border"
+                                                        Background="{TemplateBinding Background}"
+                                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                                        CornerRadius="3"
+                                                        SnapsToDevicePixels="True">
+                                                    <ContentPresenter Margin="{TemplateBinding Padding}"
+                                                                      HorizontalAlignment="Center"
+                                                                      VerticalAlignment="Center"
+                                                                      RecognizesAccessKey="True"
+                                                                      TextElement.Foreground="{TemplateBinding Foreground}"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="border" Property="Background" Value="{DynamicResource ThemeButtonBackgroundHover}" />
+                                                    </Trigger>
+                                                    <Trigger Property="IsPressed" Value="True">
+                                                        <Setter TargetName="border" Property="Background" Value="{DynamicResource ThemeButtonBackgroundPressed}" />
+                                                    </Trigger>
+                                                    <Trigger Property="IsChecked" Value="True">
+                                                        <Setter Property="Background" Value="#2E8B57" />
+                                                        <Setter Property="Foreground" Value="White" />
+                                                    </Trigger>
+                                                    <Trigger Property="IsEnabled" Value="False">
+                                                        <Setter Property="Opacity" Value="0.5" />
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ToggleButton.Style>
+                        </ToggleButton>
 
                 </Grid>
                 
@@ -412,7 +364,7 @@
         </Grid>
         
         <!-- Status Bar -->
-        <StatusBar Grid.Row="2" 
+        <StatusBar Grid.Row="3" 
                    Background="{DynamicResource ThemeWindowBackground}"
                    BorderBrush="{DynamicResource ThemeBorderBrush}"
                    BorderThickness="0,1,0,0"

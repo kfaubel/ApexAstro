@@ -378,7 +378,8 @@ namespace ApexAstro.Wpf
 
                 if (System.IO.Directory.Exists(path))
                 {
-                    await LoadFilesWithProgressAsync(path, isStartup: false);
+                    var resolvedPath = ApexAstro.Wpf.Services.FileManagementService.ResolveDirectoryForLoad(path);
+                    await LoadFilesWithProgressAsync(resolvedPath, isStartup: false);
                     return;
                 }
 
@@ -386,7 +387,8 @@ namespace ApexAstro.Wpf
                 var directory = System.IO.Path.GetDirectoryName(path);
                 if (!string.IsNullOrWhiteSpace(directory) && System.IO.Directory.Exists(directory))
                 {
-                    await LoadFilesWithProgressAsync(directory, isStartup: false);
+                    var resolvedDirectory = ApexAstro.Wpf.Services.FileManagementService.ResolveDirectoryForLoad(directory);
+                    await LoadFilesWithProgressAsync(resolvedDirectory, isStartup: false);
                 }
             }
             catch (Exception ex)
@@ -507,7 +509,7 @@ namespace ApexAstro.Wpf
 
             if (loadSucceeded)
             {
-                // No additional action required after folder load.
+                ApplyAutoMarkFromSavedCriteria();
             }
         }
 
@@ -1828,41 +1830,75 @@ namespace ApexAstro.Wpf
         {
             if (sender is System.Windows.Controls.Button button && button.ContextMenu != null)
             {
-                // Clear any existing recent folder menu items (keep the first 3: Open Folder, Separator, Header)
-                while (button.ContextMenu.Items.Count > 3)
-                {
-                    button.ContextMenu.Items.RemoveAt(3);
-                }
-                
-                // Add recent folder menu items dynamically
-                if (_viewModel != null && _viewModel.RecentFolders.Count > 0)
-                {
-                    foreach (var folder in _viewModel.RecentFolders)
-                    {
-                        var menuItem = new System.Windows.Controls.MenuItem
-                        {
-                            Header = folder,
-                            Command = _viewModel.OpenRecentFolderCommand,
-                            CommandParameter = folder
-                        };
-                        button.ContextMenu.Items.Add(menuItem);
-                    }
-                }
-                else
-                {
-                    // Show a disabled item if no recent folders
-                    var noItemsMenuItem = new System.Windows.Controls.MenuItem
-                    {
-                        Header = "(No recent folders)",
-                        IsEnabled = false
-                    };
-                    button.ContextMenu.Items.Add(noItemsMenuItem);
-                }
+                PopulateRecentFolderItems(button.ContextMenu.Items, 3);
                 
                 button.ContextMenu.PlacementTarget = button;
                 button.ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
                 button.ContextMenu.IsOpen = true;
             }
+        }
+
+        private void OpenRecentMenuItem_SubmenuOpened(object sender, RoutedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.MenuItem menuItem)
+            {
+                PopulateRecentFolderItems(menuItem.Items, 0);
+            }
+        }
+
+        private void PopulateRecentFolderItems(System.Windows.Controls.ItemCollection items, int staticItemCount)
+        {
+            while (items.Count > staticItemCount)
+            {
+                items.RemoveAt(staticItemCount);
+            }
+
+            if (_viewModel != null && _viewModel.RecentFolders.Count > 0)
+            {
+                foreach (var folder in _viewModel.RecentFolders.Take(10))
+                {
+                    var menuItem = new System.Windows.Controls.MenuItem
+                    {
+                        Header = folder,
+                        Command = _viewModel.OpenRecentFolderCommand,
+                        CommandParameter = folder
+                    };
+                    items.Add(menuItem);
+                }
+            }
+            else
+            {
+                items.Add(new System.Windows.Controls.MenuItem
+                {
+                    Header = "(No recent folders)",
+                    IsEnabled = false
+                });
+            }
+        }
+
+        private void SessionMetadataMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new CsvKeywordsDialog(_appConfig.CsvKeywords)
+            {
+                Owner = this
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                _appConfig.CsvKeywords = dialog.GetSelectedKeywords();
+                _appConfig.Save();
+
+                _viewModel?.RefreshFileListCsvKeywords();
+                _listViewColumnService?.UpdateListViewColumns();
+                _listViewColumnService?.AutoResizeColumns();
+            }
+        }
+
+        private void ToggleHistogramMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            _appConfig.ShowHistogram = !_appConfig.ShowHistogram;
+            _appConfig.Save();
+            SetHistogramVisibility(_appConfig.ShowHistogram);
         }
 
         /// <summary>
@@ -2248,6 +2284,11 @@ namespace ApexAstro.Wpf
             }
         }
 
+        private void DeleteSelectedButton_Click(object sender, RoutedEventArgs e)
+        {
+            _viewModel?.DeleteSelectedFilesToRecycleBin();
+        }
+
         /// <summary>
         /// Event handler for the Select All button - selects all files in the list
         /// </summary>
@@ -2354,6 +2395,45 @@ namespace ApexAstro.Wpf
                 System.Windows.MessageBox.Show($"Error applying auto-mark criteria: {ex.Message}", 
                     "Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             }
+        }
+
+        private void ApplyAutoMarkFromSavedCriteria()
+        {
+            var enabledCriteria = _appConfig.AutoSelectCriteria
+                .Where(c => c != null && c.IsEnabled && !string.IsNullOrWhiteSpace(c.Key))
+                .Select(c =>
+                {
+                    var criteria = new AutoMarkCriteria
+                    {
+                        Key = c.Key,
+                        AllowBlank = c.AllowBlank,
+                        AllowedValues = (c.AllowedValues ?? string.Empty)
+                            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                            .ToList()
+                    };
+
+                    if (!string.IsNullOrWhiteSpace(c.MinValue) &&
+                        double.TryParse(c.MinValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var minValue))
+                    {
+                        criteria.MinValue = minValue;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(c.MaxValue) &&
+                        double.TryParse(c.MaxValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var maxValue))
+                    {
+                        criteria.MaxValue = maxValue;
+                    }
+
+                    return criteria;
+                })
+                .ToList();
+
+            if (enabledCriteria.Count == 0 || _viewModel?.Files.Count == 0)
+            {
+                return;
+            }
+
+            ApplyAutoMark(enabledCriteria);
         }
 
         private async void OpenFiles_Click(object sender, RoutedEventArgs e)

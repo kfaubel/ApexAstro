@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using ApexAstro.Wpf.Models;
@@ -97,64 +98,179 @@ namespace ApexAstro.Wpf.Services
             };
         }
 
+        public static string ResolveDirectoryForLoad(string directory)
+        {
+            if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+                return directory;
+
+            string current = directory;
+
+            if (HasDirectSupportedFiles(current))
+                return current;
+
+            string? dataDirectory = ResolveDataDirectory(current);
+            if (!string.IsNullOrEmpty(dataDirectory))
+                return dataDirectory;
+
+            for (int depth = 0; depth < 10; depth++)
+            {
+                if (HasDirectSupportedFiles(current))
+                    break;
+
+                var subdirectories = Directory
+                    .EnumerateDirectories(current)
+                    .Where(path =>
+                    {
+                        try
+                        {
+                            var attrs = File.GetAttributes(path);
+                            return (attrs & FileAttributes.Hidden) == 0 && (attrs & FileAttributes.System) == 0;
+                        }
+                        catch
+                        {
+                            return false;
+                        }
+                    })
+                    .ToArray();
+
+                if (subdirectories.Length != 1)
+                    break;
+
+                current = subdirectories[0];
+            }
+
+            return current;
+        }
+
         public List<FileItem> LoadFilesFromDirectory(string directory)
         {
             var files = new List<FileItem>();
-            
+
             if (!Directory.Exists(directory))
                 return files;
 
+            string normalizedDirectory = ResolveDirectoryForLoad(directory);
+
             try
             {
-                var operationStopwatch = System.Diagnostics.Stopwatch.StartNew();
-                
-                // Load all supported image formats
-                var supportedExtensions = new[]
+                string? dataRoot = ResolveDataDirectory(normalizedDirectory);
+                if (dataRoot != null && !HasDirectSupportedFiles(normalizedDirectory))
                 {
-                    "*.fits", "*.fit", "*.fts",  // FITS files
-                    "*.xisf",                     // XISF files
-                    "*.arw",                      // Sony ARW raw files
-                    "*.jpg", "*.jpeg",           // JPEG files
-                    "*.png",                     // PNG files
-                    "*.bmp",                     // Bitmap files
-                    "*.tiff", "*.tif",           // TIFF files
-                    "*.gif",                     // GIF files
-                    "*.webp"                     // WebP files
-                };
+                    return LoadFilesFromDataDirectory(dataRoot);
+                }
 
-                var allFiles = new List<string>();
-                foreach (var pattern in supportedExtensions)
-                {
-                    var matchingFiles = Directory.GetFiles(directory, pattern, SearchOption.TopDirectoryOnly);
-                    allFiles.AddRange(matchingFiles);
-                }
-                
-                operationStopwatch.Stop();
-                if (operationStopwatch.ElapsedMilliseconds > 3000)
-                {
-                    App.LoggingService?.LogWarning("Directory Enumeration", $"'{directory}' took {operationStopwatch.ElapsedMilliseconds}ms (>3s threshold)");
-                }
-                
-                var fileInfos = allFiles.Select(f => new FileInfo(f))
-                    .OrderBy(f => f.Name);
-
-                foreach (var fileInfo in fileInfos)
-                {
-                    files.Add(new FileItem
-                    {
-                        Name = fileInfo.Name,
-                        Path = fileInfo.FullName,
-                        Size = fileInfo.Length
-                    });
-                }
+                return LoadFilesFromSingleDirectory(normalizedDirectory);
             }
             catch (Exception ex)
             {
-                // Log directory access failures (permissions, network issues, etc.)
                 App.LoggingService?.LogError("Directory Load", $"Failed to load files from {directory}", ex);
             }
 
             return files;
+        }
+
+        private List<FileItem> LoadFilesFromSingleDirectory(string directory)
+        {
+            var files = new List<FileItem>();
+            var allFiles = EnumerateSupportedFiles(directory).ToList();
+
+            foreach (var fileInfo in allFiles.Select(f => new FileInfo(f)).OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                files.Add(new FileItem
+                {
+                    Name = fileInfo.Name,
+                    Path = fileInfo.FullName,
+                    Size = fileInfo.Length
+                });
+            }
+
+            return files;
+        }
+
+        private List<FileItem> LoadFilesFromDataDirectory(string dataDirectory)
+        {
+            var allFiles = new List<string>();
+
+            foreach (var nightDirectory in Directory.EnumerateDirectories(dataDirectory)
+                         .Where(IsNightDirectory)
+                         .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+            {
+                string? lightDirectory = Directory.EnumerateDirectories(nightDirectory)
+                    .FirstOrDefault(path => string.Equals(Path.GetFileName(path), "LIGHT", StringComparison.OrdinalIgnoreCase));
+
+                if (!string.IsNullOrEmpty(lightDirectory))
+                {
+                    allFiles.AddRange(EnumerateSupportedFiles(lightDirectory));
+                }
+            }
+
+            return allFiles
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(path => new FileInfo(path))
+                .OrderBy(fileInfo => fileInfo.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(fileInfo => new FileItem
+                {
+                    Name = fileInfo.Name,
+                    Path = fileInfo.FullName,
+                    Size = fileInfo.Length
+                })
+                .ToList();
+        }
+
+        private static string? ResolveDataDirectory(string directory)
+        {
+            if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+                return null;
+
+            if (string.Equals(Path.GetFileName(directory), "Data", StringComparison.OrdinalIgnoreCase))
+                return directory;
+
+            string? dataDirectory = Directory.EnumerateDirectories(directory, "*", SearchOption.TopDirectoryOnly)
+                .FirstOrDefault(path => string.Equals(Path.GetFileName(path), "Data", StringComparison.OrdinalIgnoreCase));
+
+            return dataDirectory;
+        }
+
+        private static bool HasDirectSupportedFiles(string directory)
+        {
+            return EnumerateSupportedFiles(directory).Any();
+        }
+
+        private static IEnumerable<string> EnumerateSupportedFiles(string directory)
+        {
+            if (!Directory.Exists(directory))
+                return Enumerable.Empty<string>();
+
+            var supportedExtensions = new[]
+            {
+                "*.fits", "*.fit", "*.fts",
+                "*.xisf",
+                "*.arw",
+                "*.jpg", "*.jpeg",
+                "*.png",
+                "*.bmp",
+                "*.tiff", "*.tif",
+                "*.gif",
+                "*.webp"
+            };
+
+            var allFiles = new List<string>();
+            foreach (var pattern in supportedExtensions)
+            {
+                allFiles.AddRange(Directory.GetFiles(directory, pattern, SearchOption.TopDirectoryOnly));
+            }
+
+            return allFiles.Distinct(StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static bool IsNightDirectory(string directoryPath)
+        {
+            string name = Path.GetFileName(directoryPath);
+            if (string.IsNullOrWhiteSpace(name) || !name.StartsWith("NIGHT_", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            string datePart = name.Substring("NIGHT_".Length);
+            return DateTime.TryParseExact(datePart, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
         }
     }
 }
