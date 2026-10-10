@@ -103,6 +103,9 @@ namespace ApexAstro.Wpf.Services
             if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
                 return directory;
 
+            if (IsDataDirectory(directory))
+                return directory;
+
             string current = directory;
 
             if (HasDirectSupportedFiles(current))
@@ -153,6 +156,11 @@ namespace ApexAstro.Wpf.Services
 
             try
             {
+                if (IsDataDirectory(normalizedDirectory))
+                {
+                    return LoadFilesFromDataDirectory(normalizedDirectory);
+                }
+
                 string? dataRoot = ResolveDataDirectory(normalizedDirectory);
                 if (dataRoot != null && !HasDirectSupportedFiles(normalizedDirectory))
                 {
@@ -222,13 +230,19 @@ namespace ApexAstro.Wpf.Services
             if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
                 return null;
 
-            if (string.Equals(Path.GetFileName(directory), "Data", StringComparison.OrdinalIgnoreCase))
+            if (IsDataDirectory(directory))
                 return directory;
 
             string? dataDirectory = Directory.EnumerateDirectories(directory, "*", SearchOption.TopDirectoryOnly)
-                .FirstOrDefault(path => string.Equals(Path.GetFileName(path), "Data", StringComparison.OrdinalIgnoreCase));
+                .FirstOrDefault(path => IsDataDirectory(path));
 
             return dataDirectory;
+        }
+
+        private static bool IsDataDirectory(string directory)
+        {
+            return !string.IsNullOrWhiteSpace(directory) &&
+                   string.Equals(Path.GetFileName(directory), "Data", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool HasDirectSupportedFiles(string directory)

@@ -358,6 +358,43 @@ namespace ApexAstro.Tests
         }
 
         [Fact]
+        public void LoadFilesFromDirectory_DataDirectory_IgnoresDirectFilesAndUsesNightLightFiles()
+        {
+            var tempRoot = Path.Combine(Path.GetTempPath(), "ApexAstroTest_DataDirectory_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempRoot);
+
+            try
+            {
+                var dataDir = Path.Combine(tempRoot, "Data");
+                Directory.CreateDirectory(dataDir);
+
+                var directFile = Path.Combine(dataDir, "should-ignore.fits");
+                File.WriteAllText(directFile, "ignore");
+
+                var nightDir = Path.Combine(dataDir, "NIGHT_2026-09-13");
+                var lightDir = Path.Combine(nightDir, "LIGHT");
+                Directory.CreateDirectory(lightDir);
+
+                var lightFile1 = Path.Combine(lightDir, "night1.fits");
+                var lightFile2 = Path.Combine(lightDir, "night2.xisf");
+                File.WriteAllText(lightFile1, "fits");
+                File.WriteAllText(lightFile2, "xisf");
+
+                var files = _service.LoadFilesFromDirectory(dataDir);
+
+                Assert.Equal(2, files.Count);
+                Assert.DoesNotContain(files, f => f.Path == directFile);
+                Assert.Contains(files, f => f.Path == lightFile1);
+                Assert.Contains(files, f => f.Path == lightFile2);
+            }
+            finally
+            {
+                if (Directory.Exists(tempRoot))
+                    Directory.Delete(tempRoot, true);
+            }
+        }
+
+        [Fact]
         public void AutoSelectForegroundConverter_UsesSelectionRulesForCustomKeywords()
         {
             var file = new FileItem
