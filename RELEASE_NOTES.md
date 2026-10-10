@@ -1,3 +1,7 @@
+## v1.12.0 - 2026-10-09
+
+- TODO: summarize changes
+
 ## v1.11.1 - 2026-08-18
 
 * Show custom keywords with NaN as 0

@@ -10,9 +10,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>ApexAstro</AssemblyName>
     <!-- Version Information -->
-    <Version>1.11.1</Version>
-    <AssemblyVersion>1.11.1.0</AssemblyVersion>
-    <FileVersion>1.11.1.0</FileVersion>
+    <Version>1.12.0</Version>
+    <AssemblyVersion>1.12.0.0</AssemblyVersion>
+    <FileVersion>1.12.0.0</FileVersion>
     <AssemblyTitle>ApexAstro</AssemblyTitle>
     <AssemblyDescription>Astronomical Image Viewer for FITS and standard image formats</AssemblyDescription>
     <AssemblyCompany>Ken Faubel</AssemblyCompany>
