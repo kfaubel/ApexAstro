@@ -275,7 +275,6 @@ namespace ApexAstro.Wpf.Services
         public void PopulateKeywords(Models.FileItem fileItem, IEnumerable<string> customKeywords, IEnumerable<string> fitsKeywords, bool skipXisf, bool calculateMedian, IEnumerable<string>? arwKeywords = null)
         {
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-            fileItem.MetadataReady = false;
             
             // Debug: Log median calculation flag
             if (calculateMedian)
@@ -326,7 +325,8 @@ namespace ApexAstro.Wpf.Services
             }
             finally
             {
-                fileItem.MetadataReady = true;
+                // MetadataReady is managed at the list level so the whole grid renders in a consistent
+                // green/neutral state until all files are finished loading.
             }
             
             stopwatch.Stop();

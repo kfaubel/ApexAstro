@@ -275,6 +275,11 @@ namespace ApexAstro.Wpf.ViewModels
             // Track timing statistics
             var fileTimes = new System.Collections.Concurrent.ConcurrentBag<(string fileName, long elapsedMs)>();
             
+            foreach (var fileItem in fileItems)
+            {
+                fileItem.MetadataReady = false;
+            }
+
             // Process files in parallel for better performance
             var metadataStart = totalStopwatch.ElapsedMilliseconds;
             System.Threading.Tasks.Parallel.ForEach(fileItems, 
@@ -349,6 +354,11 @@ namespace ApexAstro.Wpf.ViewModels
                         _loggingService.LogError("Metadata Extraction", $"Failed to process {fileItem.Name}: {ex.Message}", ex);
                     }
                 });
+
+            foreach (var fileItem in fileItems)
+            {
+                fileItem.MetadataReady = true;
+            }
             
             var metadataTime = totalStopwatch.ElapsedMilliseconds - metadataStart;
             var avgTimePerFile = total > 0 ? metadataTime / (double)total : 0;
@@ -1245,10 +1255,19 @@ namespace ApexAstro.Wpf.ViewModels
                 _currentSortColumn = columnName;
                 _currentSortDirection = ListSortDirection.Ascending;
             }
-            
-            // Create a sorted list based on the column
-            var sortedFiles = SortFilesByColumn(Files.ToList(), columnName, _currentSortDirection);
-            
+
+            ApplyCurrentSort();
+        }
+
+        private void ApplyCurrentSort()
+        {
+            if (string.IsNullOrEmpty(_currentSortColumn) || Files.Count == 0)
+            {
+                return;
+            }
+
+            var sortedFiles = SortFilesByColumn(Files.ToList(), _currentSortColumn, _currentSortDirection);
+
             // Clear and repopulate the ObservableCollection to maintain the same references
             // but in sorted order. This preserves selection and other UI state.
             for (int i = 0; i < sortedFiles.Count; i++)
@@ -2245,6 +2264,22 @@ namespace ApexAstro.Wpf.ViewModels
                 OnPropertyChanged(nameof(HasSelectedFiles));
                 OnPropertyChanged(nameof(FileSelectionStatusText));
                 OnPropertyChanged(nameof(StatusBarText));
+
+                if (!string.IsNullOrEmpty(_currentSortColumn) && Files.Count > 0)
+                {
+                    // Defer the sort so it does not run while the auto-mark loop or any other
+                    // enumeration is still iterating the same ObservableCollection.
+                    if (System.Windows.Application.Current is not null)
+                    {
+                        System.Windows.Application.Current.Dispatcher.BeginInvoke(
+                            System.Windows.Threading.DispatcherPriority.Background,
+                            new Action(ApplyCurrentSort));
+                    }
+                    else
+                    {
+                        ApplyCurrentSort();
+                    }
+                }
             }
         }
 
