@@ -275,6 +275,7 @@ namespace ApexAstro.Wpf.Services
         public void PopulateKeywords(Models.FileItem fileItem, IEnumerable<string> customKeywords, IEnumerable<string> fitsKeywords, bool skipXisf, bool calculateMedian, IEnumerable<string>? arwKeywords = null)
         {
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            fileItem.MetadataReady = false;
             
             // Debug: Log median calculation flag
             if (calculateMedian)
@@ -282,43 +283,50 @@ namespace ApexAstro.Wpf.Services
                 System.Diagnostics.Debug.WriteLine($"PopulateKeywords for {fileItem.Name}: calculateMedian=true");
             }
             
-            // Extract custom keywords from filename
-            if (customKeywords.Any())
+            try
             {
-                var extractedCustom = ExtractCustomKeywordsFromFilename(fileItem.Name, customKeywords);
-                fileItem.CustomKeywords = extractedCustom;
-                
-                // Debug log
-                if (extractedCustom.Count > 0)
+                // Extract custom keywords from filename
+                if (customKeywords.Any())
                 {
-                    System.Diagnostics.Debug.WriteLine($"Extracted {extractedCustom.Count} custom keywords from {fileItem.Name}");
+                    var extractedCustom = ExtractCustomKeywordsFromFilename(fileItem.Name, customKeywords);
+                    fileItem.CustomKeywords = extractedCustom;
+                    
+                    // Debug log
+                    if (extractedCustom.Count > 0)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Extracted {extractedCustom.Count} custom keywords from {fileItem.Name}");
+                    }
+                }
+
+                // Extract FITS keywords from file headers
+                if (fitsKeywords.Any())
+                {
+                    var extractedFits = ExtractFitsKeywords(fileItem.Path, fitsKeywords, skipXisf);
+                    fileItem.FitsKeywords = extractedFits;
+                    
+                    // Debug log
+                    if (extractedFits.Count > 0)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Extracted {extractedFits.Count} FITS keywords from {fileItem.Name}");
+                    }
+                }
+
+                if (arwKeywords != null && arwKeywords.Any())
+                {
+                    fileItem.ArwKeywords = ExtractArwKeywords(fileItem.Path, arwKeywords);
+                }
+                
+                // Calculate median and mean values for the image (only if requested)
+                if (calculateMedian)
+                {
+                    var (median, mean) = CalculateStats(fileItem.Path);
+                    fileItem.Median = median;
+                    fileItem.Mean = mean;
                 }
             }
-
-            // Extract FITS keywords from file headers
-            if (fitsKeywords.Any())
+            finally
             {
-                var extractedFits = ExtractFitsKeywords(fileItem.Path, fitsKeywords, skipXisf);
-                fileItem.FitsKeywords = extractedFits;
-                
-                // Debug log
-                if (extractedFits.Count > 0)
-                {
-                    System.Diagnostics.Debug.WriteLine($"Extracted {extractedFits.Count} FITS keywords from {fileItem.Name}");
-                }
-            }
-
-            if (arwKeywords != null && arwKeywords.Any())
-            {
-                fileItem.ArwKeywords = ExtractArwKeywords(fileItem.Path, arwKeywords);
-            }
-            
-            // Calculate median and mean values for the image (only if requested)
-            if (calculateMedian)
-            {
-                var (median, mean) = CalculateStats(fileItem.Path);
-                fileItem.Median = median;
-                fileItem.Mean = mean;
+                fileItem.MetadataReady = true;
             }
             
             stopwatch.Stop();

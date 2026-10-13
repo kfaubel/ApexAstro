@@ -13,6 +13,8 @@ namespace ApexAstro.Wpf.Converters
     {
         public string Keyword { get; init; } = string.Empty;
         public IEnumerable<AutoSelectCriteriaSetting> Criteria { get; init; } = Enumerable.Empty<AutoSelectCriteriaSetting>();
+        public string DefaultBrushResourceKey { get; init; } = "ThemeAccentGreen";
+        public System.Windows.Media.Brush? DefaultBrushFallback { get; init; }
     }
 
     public class AutoSelectRowForegroundConverter : IValueConverter
@@ -27,9 +29,14 @@ namespace ApexAstro.Wpf.Converters
             if (parameter is AutoSelectKeywordForegroundContext keywordContext &&
                 !string.IsNullOrWhiteSpace(keywordContext.Keyword))
             {
+                if (!fileItem.MetadataReady)
+                {
+                    return GetDefaultBrush(keywordContext);
+                }
+
                 return IsKeywordOutOfRange(fileItem, keywordContext)
                     ? System.Windows.Media.Brushes.Red
-                    : GetGreenBrush();
+                    : GetDefaultBrush(keywordContext);
             }
 
             var criteria = parameter as IEnumerable<AutoSelectCriteriaSetting> ?? Enumerable.Empty<AutoSelectCriteriaSetting>();
@@ -98,6 +105,11 @@ namespace ApexAstro.Wpf.Converters
                 return csvValue;
             }
 
+            if (fileItem.ArwKeywords.TryGetValue(key, out var arwValue))
+            {
+                return arwValue;
+            }
+
             return null;
         }
 
@@ -151,6 +163,110 @@ namespace ApexAstro.Wpf.Converters
             }
 
             return System.Windows.Application.Current.TryFindResource("ThemeAccentGreen") as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.Green;
+        }
+
+        private static System.Windows.Media.Brush GetDefaultBrush(AutoSelectKeywordForegroundContext context)
+        {
+            if (System.Windows.Application.Current is not null)
+            {
+                var themedBrush = System.Windows.Application.Current.TryFindResource(context.DefaultBrushResourceKey) as System.Windows.Media.Brush;
+                if (themedBrush is not null)
+                {
+                    return themedBrush;
+                }
+            }
+
+            return context.DefaultBrushFallback ?? GetGreenBrush();
+        }
+    }
+
+    public class AutoSelectKeywordTextConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is not FileItem fileItem)
+            {
+                return string.Empty;
+            }
+
+            if (parameter is not AutoSelectKeywordForegroundContext keywordContext ||
+                string.IsNullOrWhiteSpace(keywordContext.Keyword))
+            {
+                return string.Empty;
+            }
+
+            var matchingRule = keywordContext.Criteria.FirstOrDefault(r =>
+                r != null &&
+                r.IsEnabled &&
+                !string.IsNullOrWhiteSpace(r.Key) &&
+                r.Key.Equals(keywordContext.Keyword, StringComparison.OrdinalIgnoreCase));
+
+            string? currentValue = GetValueForRule(fileItem, keywordContext.Keyword);
+            bool isBlankValue = string.IsNullOrWhiteSpace(currentValue) ||
+                currentValue.Equals("NaN", StringComparison.OrdinalIgnoreCase) ||
+                (double.TryParse(currentValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var numericValue) &&
+                 double.IsNaN(numericValue));
+
+            if (!fileItem.MetadataReady)
+            {
+                return string.Empty;
+            }
+
+            if (isBlankValue)
+            {
+                if (matchingRule is not null && !matchingRule.AllowBlank)
+                {
+                    return "---";
+                }
+
+                return string.Empty;
+            }
+
+            if (keywordContext.Keyword.Equals("RMS", StringComparison.OrdinalIgnoreCase) &&
+                double.TryParse(currentValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var rmsValue) &&
+                rmsValue == 0.0)
+            {
+                return "---";
+            }
+
+            return currentValue ?? string.Empty;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotSupportedException();
+        }
+
+        private static string? GetValueForRule(FileItem fileItem, string key)
+        {
+            if (string.Equals(key, "Median", StringComparison.OrdinalIgnoreCase))
+            {
+                return fileItem.Median.HasValue
+                    ? fileItem.Median.Value.ToString("G", CultureInfo.InvariantCulture)
+                    : null;
+            }
+
+            if (fileItem.CustomKeywords.TryGetValue(key, out var customValue))
+            {
+                return customValue;
+            }
+
+            if (fileItem.FitsKeywords.TryGetValue(key, out var fitsValue))
+            {
+                return fitsValue;
+            }
+
+            if (fileItem.CsvKeywords.TryGetValue(key, out var csvValue))
+            {
+                return csvValue;
+            }
+
+            if (fileItem.ArwKeywords.TryGetValue(key, out var arwValue))
+            {
+                return arwValue;
+            }
+
+            return null;
         }
     }
 }

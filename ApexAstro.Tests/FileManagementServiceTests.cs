@@ -329,7 +329,7 @@ namespace ApexAstro.Tests
         }
 
         [Fact]
-        public void LoadFilesFromDirectory_PrefersDirectFilesOverDataAggregation()
+        public void LoadFilesFromDirectory_PrefersLightDirectoriesOverDirectFiles()
         {
             var tempRoot = Path.Combine(Path.GetTempPath(), "ApexAstroTest_DataPriority_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempRoot);
@@ -348,7 +348,8 @@ namespace ApexAstro.Tests
                 var files = _service.LoadFilesFromDirectory(tempRoot);
 
                 Assert.Single(files);
-                Assert.Equal(directFile, files[0].Path);
+                Assert.Equal(dataFile, files[0].Path);
+                Assert.DoesNotContain(files, f => f.Path == directFile);
             }
             finally
             {

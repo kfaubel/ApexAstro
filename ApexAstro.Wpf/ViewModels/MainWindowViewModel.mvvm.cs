@@ -245,6 +245,11 @@ namespace ApexAstro.Wpf.ViewModels
             var loadDirStart = totalStopwatch.ElapsedMilliseconds;
             var fileItems = _fileManagementService.LoadFilesFromDirectory(directoryPath);
             _loggingService.LogInfo($"Directory scan took {totalStopwatch.ElapsedMilliseconds - loadDirStart}ms for {fileItems.Count} files");
+
+            foreach (var fileItem in fileItems)
+            {
+                fileItem.MetadataReady = false;
+            }
             
             // Return file items immediately without metadata - metadata will be populated separately
             return fileItems.OrderBy(f => f.Name).ToList();
@@ -392,6 +397,8 @@ namespace ApexAstro.Wpf.ViewModels
                 // Persist computed stats to AstroData.csv so the next folder open can skip recomputation
                 _astroDataCacheService.Save(CurrentDirectory, fileItems);
             }
+
+            LogHfrMedianAndMadByFilter(fileItems);
         }
         
         /// <summary>
@@ -524,7 +531,148 @@ namespace ApexAstro.Wpf.ViewModels
             if (_appConfig.ShowMedianColumn && !string.IsNullOrEmpty(CurrentDirectory))
                 _astroDataCacheService.Save(CurrentDirectory, result);
 
+            LogHfrMedianAndMadByFilter(result);
+
             return result;
+        }
+
+        private void LogHfrMedianAndMadByFilter(System.Collections.Generic.List<Models.FileItem> fileItems)
+        {
+            var hfrByFilter = fileItems
+                .Select(fileItem =>
+                {
+                    if (!TryGetHfrValue(fileItem, out var hfrValue))
+                    {
+                        return (hasValue: false, filter: string.Empty, hfr: 0.0);
+                    }
+
+                    var filter = ResolveFilterForHfrStats(fileItem);
+                    if (string.IsNullOrWhiteSpace(filter))
+                    {
+                        return (hasValue: false, filter: string.Empty, hfr: 0.0);
+                    }
+
+                    return (hasValue: true, filter, hfr: hfrValue);
+                })
+                .Where(x => x.hasValue)
+                .GroupBy(x => x.filter, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var filterGroup in hfrByFilter)
+            {
+                var hfrValues = filterGroup.Select(x => x.hfr).ToList();
+                if (hfrValues.Count == 0)
+                {
+                    continue;
+                }
+
+                var median = ComputeMedian(hfrValues);
+                var mad = ComputeMedian(hfrValues.Select(value => Math.Abs(value - median)));
+                _loggingService.LogInfo($"Filter: {filterGroup.Key}, HFR Median: {median:F2}, MAD: {mad:F2}");
+            }
+        }
+
+        private static bool TryGetHfrValue(FileItem fileItem, out double hfrValue)
+        {
+            hfrValue = 0;
+
+            string? rawHfr = null;
+            if (TryGetDictionaryValue(fileItem.CustomKeywords, "HFR", out var customHfr))
+            {
+                rawHfr = customHfr;
+            }
+            else if (TryGetDictionaryValue(fileItem.CsvKeywords, "HFR", out var csvHfr))
+            {
+                rawHfr = csvHfr;
+            }
+            else if (TryGetDictionaryValue(fileItem.FitsKeywords, "HFR", out var fitsHfr))
+            {
+                rawHfr = fitsHfr;
+            }
+
+            return double.TryParse(rawHfr, NumberStyles.Float, CultureInfo.InvariantCulture, out hfrValue)
+                   && double.IsFinite(hfrValue);
+        }
+
+        private static string ResolveFilterForHfrStats(FileItem fileItem)
+        {
+            if (TryGetDictionaryValue(fileItem.FitsKeywords, "FILTER", out var rawFitsFilter))
+            {
+                var normalizedFitsFilter = NormalizeFilterValue(rawFitsFilter);
+                if (!string.IsNullOrWhiteSpace(normalizedFitsFilter))
+                {
+                    return normalizedFitsFilter;
+                }
+            }
+
+            return NormalizeFilterValue(ParseFilterFromFilename(fileItem.Name));
+        }
+
+        private static bool TryGetDictionaryValue(Dictionary<string, string> dictionary, string key, out string value)
+        {
+            foreach (var kvp in dictionary)
+            {
+                if (string.Equals(kvp.Key, key, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = kvp.Value;
+                    return true;
+                }
+            }
+
+            value = string.Empty;
+            return false;
+        }
+
+        private static string ParseFilterFromFilename(string filename)
+        {
+            if (string.IsNullOrWhiteSpace(filename))
+            {
+                return string.Empty;
+            }
+
+            var nameWithoutExtension = System.IO.Path.GetFileNameWithoutExtension(filename);
+            if (string.IsNullOrWhiteSpace(nameWithoutExtension))
+            {
+                return string.Empty;
+            }
+
+            var tokens = nameWithoutExtension.Split('_', StringSplitOptions.RemoveEmptyEntries);
+            return tokens.Length > 2 ? tokens[2] : string.Empty;
+        }
+
+        private static string NormalizeFilterValue(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return string.Empty;
+            }
+
+            var compact = raw.Trim().ToUpperInvariant().Replace("-", string.Empty).Replace("_", string.Empty).Replace(" ", string.Empty);
+            return compact switch
+            {
+                "L" or "LUM" or "LUMINANCE" => "L",
+                "R" or "RED" => "R",
+                "G" or "GREEN" => "G",
+                "B" or "BLUE" => "B",
+                "S" or "SII" or "S2" => "S",
+                "H" or "HA" or "HALPHA" or "HALPHA7" => "H",
+                "O" or "OIII" or "O3" => "O",
+                _ => compact.Length == 1 && "LRGBSHO".Contains(compact, StringComparison.Ordinal) ? compact : string.Empty
+            };
+        }
+
+        private static double ComputeMedian(IEnumerable<double> values)
+        {
+            var sorted = values.OrderBy(v => v).ToList();
+            if (sorted.Count == 0)
+            {
+                return 0;
+            }
+
+            var middle = sorted.Count / 2;
+            return sorted.Count % 2 == 0
+                ? (sorted[middle - 1] + sorted[middle]) / 2.0
+                : sorted[middle];
         }
         
         /// <summary>
@@ -1113,12 +1261,24 @@ namespace ApexAstro.Wpf.ViewModels
             }
         }
         
+        private static List<FileItem> PrioritizeMarkedFiles(List<FileItem> files)
+        {
+            if (files.Count == 0 || !files.Any(f => f.IsSelected))
+            {
+                return files;
+            }
+
+            return files
+                .OrderBy(f => f.IsSelected ? 0 : 1)
+                .ToList();
+        }
+
         /// <summary>
         /// Sorts a list of FileItem objects by the specified column
         /// </summary>
         private List<FileItem> SortFilesByColumn(List<FileItem> files, string columnName, ListSortDirection direction)
         {
-            return columnName switch
+            var orderedFiles = columnName switch
             {
                 "File" => direction == ListSortDirection.Ascending 
                     ? files.OrderBy(f => GetDisplayFileName(f), StringComparer.OrdinalIgnoreCase).ToList()
@@ -1149,8 +1309,8 @@ namespace ApexAstro.Wpf.ViewModels
                     : files.OrderByDescending(f => f.Mean ?? double.MinValue).ToList(),
 
                 "Mark" => direction == ListSortDirection.Ascending 
-                    ? files.OrderBy(f => f.IsSelected).ToList()
-                    : files.OrderByDescending(f => f.IsSelected).ToList(),
+                    ? files.OrderBy(f => f.IsSelected).ThenBy(f => GetDisplayFileName(f), StringComparer.OrdinalIgnoreCase).ToList()
+                    : files.OrderByDescending(f => f.IsSelected).ThenByDescending(f => GetDisplayFileName(f), StringComparer.OrdinalIgnoreCase).ToList(),
                     
                 _ when _appConfig.CustomKeywords.Contains(columnName) =>
                     SortByDictionaryValue(files, f => f.CustomKeywords, columnName, direction),
@@ -1166,6 +1326,8 @@ namespace ApexAstro.Wpf.ViewModels
                     
                 _ => files // No sorting for unknown columns
             };
+
+            return PrioritizeMarkedFiles(orderedFiles);
         }
         
         /// <summary>
@@ -1429,6 +1591,11 @@ namespace ApexAstro.Wpf.ViewModels
         /// Event that requests the View to refresh FITS keywords with a progress dialog.
         /// </summary>
         public event Action? RefreshFitsKeywordsWithProgressRequested;
+
+        /// <summary>
+        /// Event that requests the View to calculate median/mean values with a progress dialog.
+        /// </summary>
+        public event Action? CalculateMediansWithProgressRequested;
 
         /// <summary>
         /// Event that requests the View to clear the currently displayed image.
@@ -1776,21 +1943,26 @@ namespace ApexAstro.Wpf.ViewModels
                 // Calculate medians for existing files if the option was just enabled
                 if (shouldCalculateMedians)
                 {
-                    CalculateMediansForAllFiles();
+                    CalculateMediansWithProgressRequested?.Invoke();
                 }
             }
         }
 
-        private void CalculateMediansForAllFiles()
+        public void CalculateMediansForAllFiles(Action<int, int>? progressCallback = null)
         {
             if (Files.Count == 0)
                 return;
 
-            _loggingService.LogInfo($"Calculating medians for {Files.Count} files...");
+            var filesToProcess = Files.ToList();
+            int total = filesToProcess.Count;
+            int processedCount = 0;
+            object progressLock = new object();
+
+            _loggingService.LogInfo($"Calculating medians for {total} files...");
 
             // Calculate medians in parallel for better performance
             System.Threading.Tasks.Parallel.ForEach(
-                Files,
+                filesToProcess,
                 new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
                 fileItem =>
                 {
@@ -1808,13 +1980,24 @@ namespace ApexAstro.Wpf.ViewModels
                     {
                         _loggingService.LogError("Median Calculation", $"Failed to calculate median for {fileItem.Name}: {ex.Message}", ex);
                     }
+                    finally
+                    {
+                        lock (progressLock)
+                        {
+                            processedCount++;
+                            if (processedCount % 5 == 0 || processedCount == total)
+                            {
+                                progressCallback?.Invoke(processedCount, total);
+                            }
+                        }
+                    }
                 });
 
             _loggingService.LogInfo($"Median calculation complete");
 
             // Persist updated stats to AstroData.csv
             if (!string.IsNullOrEmpty(CurrentDirectory))
-                _astroDataCacheService.Save(CurrentDirectory, Files);
+                _astroDataCacheService.Save(CurrentDirectory, filesToProcess);
         }
 
         private void EnterFullScreen()
@@ -2015,7 +2198,7 @@ namespace ApexAstro.Wpf.ViewModels
         /// <summary>
         /// Shows a silent, auto-dismissing message window that fades out after the specified duration.
         /// </summary>
-        private static void ShowAutoClosingMessage(string message, string title, int displayMs = 3000, int fadeDurationMs = 600)
+        private static void ShowAutoClosingMessage(string message, string title, int displayMs = 1000, int fadeDurationMs = 600)
         {
             var window = new System.Windows.Window
             {

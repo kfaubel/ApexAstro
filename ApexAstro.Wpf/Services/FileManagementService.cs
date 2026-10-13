@@ -103,46 +103,7 @@ namespace ApexAstro.Wpf.Services
             if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
                 return directory;
 
-            if (IsDataDirectory(directory))
-                return directory;
-
-            string current = directory;
-
-            if (HasDirectSupportedFiles(current))
-                return current;
-
-            string? dataDirectory = ResolveDataDirectory(current);
-            if (!string.IsNullOrEmpty(dataDirectory))
-                return dataDirectory;
-
-            for (int depth = 0; depth < 10; depth++)
-            {
-                if (HasDirectSupportedFiles(current))
-                    break;
-
-                var subdirectories = Directory
-                    .EnumerateDirectories(current)
-                    .Where(path =>
-                    {
-                        try
-                        {
-                            var attrs = File.GetAttributes(path);
-                            return (attrs & FileAttributes.Hidden) == 0 && (attrs & FileAttributes.System) == 0;
-                        }
-                        catch
-                        {
-                            return false;
-                        }
-                    })
-                    .ToArray();
-
-                if (subdirectories.Length != 1)
-                    break;
-
-                current = subdirectories[0];
-            }
-
-            return current;
+            return directory;
         }
 
         public List<FileItem> LoadFilesFromDirectory(string directory)
@@ -152,22 +113,20 @@ namespace ApexAstro.Wpf.Services
             if (!Directory.Exists(directory))
                 return files;
 
-            string normalizedDirectory = ResolveDirectoryForLoad(directory);
-
             try
             {
-                if (IsDataDirectory(normalizedDirectory))
+                if (IsLightDirectory(directory))
                 {
-                    return LoadFilesFromDataDirectory(normalizedDirectory);
+                    return LoadFilesFromSingleDirectory(directory);
                 }
 
-                string? dataRoot = ResolveDataDirectory(normalizedDirectory);
-                if (dataRoot != null && !HasDirectSupportedFiles(normalizedDirectory))
+                var lightDirectories = FindLightDirectories(directory);
+                if (lightDirectories.Count > 0)
                 {
-                    return LoadFilesFromDataDirectory(dataRoot);
+                    return LoadFilesFromLightDirectories(lightDirectories);
                 }
 
-                return LoadFilesFromSingleDirectory(normalizedDirectory);
+                return LoadFilesFromSingleDirectory(directory);
             }
             catch (Exception ex)
             {
@@ -195,21 +154,39 @@ namespace ApexAstro.Wpf.Services
             return files;
         }
 
-        private List<FileItem> LoadFilesFromDataDirectory(string dataDirectory)
+        private static List<string> FindLightDirectories(string directory)
+        {
+            if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+                return new List<string>();
+
+            var lightDirectories = new List<string>();
+
+            foreach (var dir in Directory.EnumerateDirectories(directory, "*", SearchOption.AllDirectories))
+            {
+                if (string.Equals(Path.GetFileName(dir), "LIGHT", StringComparison.OrdinalIgnoreCase))
+                {
+                    lightDirectories.Add(dir);
+                }
+            }
+
+            if (lightDirectories.Count > 0)
+            {
+                return lightDirectories
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+
+            return new List<string>();
+        }
+
+        private static List<FileItem> LoadFilesFromLightDirectories(IEnumerable<string> lightDirectories)
         {
             var allFiles = new List<string>();
 
-            foreach (var nightDirectory in Directory.EnumerateDirectories(dataDirectory)
-                         .Where(IsNightDirectory)
-                         .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+            foreach (var lightDirectory in lightDirectories)
             {
-                string? lightDirectory = Directory.EnumerateDirectories(nightDirectory)
-                    .FirstOrDefault(path => string.Equals(Path.GetFileName(path), "LIGHT", StringComparison.OrdinalIgnoreCase));
-
-                if (!string.IsNullOrEmpty(lightDirectory))
-                {
-                    allFiles.AddRange(EnumerateSupportedFiles(lightDirectory));
-                }
+                allFiles.AddRange(EnumerateSupportedFiles(lightDirectory));
             }
 
             return allFiles
@@ -225,29 +202,10 @@ namespace ApexAstro.Wpf.Services
                 .ToList();
         }
 
-        private static string? ResolveDataDirectory(string directory)
-        {
-            if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
-                return null;
-
-            if (IsDataDirectory(directory))
-                return directory;
-
-            string? dataDirectory = Directory.EnumerateDirectories(directory, "*", SearchOption.TopDirectoryOnly)
-                .FirstOrDefault(path => IsDataDirectory(path));
-
-            return dataDirectory;
-        }
-
-        private static bool IsDataDirectory(string directory)
+        private static bool IsLightDirectory(string directory)
         {
             return !string.IsNullOrWhiteSpace(directory) &&
-                   string.Equals(Path.GetFileName(directory), "Data", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static bool HasDirectSupportedFiles(string directory)
-        {
-            return EnumerateSupportedFiles(directory).Any();
+                   string.Equals(Path.GetFileName(directory), "LIGHT", StringComparison.OrdinalIgnoreCase);
         }
 
         private static IEnumerable<string> EnumerateSupportedFiles(string directory)

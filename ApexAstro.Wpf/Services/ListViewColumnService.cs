@@ -392,21 +392,24 @@ namespace ApexAstro.Wpf.Services
 
                 var factory = new FrameworkElementFactory(typeof(System.Windows.Controls.TextBlock));
                 
-                // Use SafeDictionaryConverter with parameter to avoid KeyNotFoundException
-                var binding = new System.Windows.Data.Binding("CustomKeywords");
-                binding.Converter = new SafeDictionaryConverter();
-                binding.ConverterParameter = keyword;
+                var keywordContext = new ApexAstro.Wpf.Converters.AutoSelectKeywordForegroundContext
+                {
+                    Keyword = keyword,
+                    Criteria = _appConfig.AutoSelectCriteria,
+                    DefaultBrushResourceKey = "ThemeAccentGreen",
+                    DefaultBrushFallback = System.Windows.Media.Brushes.Green
+                };
+
+                var binding = new System.Windows.Data.Binding(".");
+                binding.Converter = new ApexAstro.Wpf.Converters.AutoSelectKeywordTextConverter();
+                binding.ConverterParameter = keywordContext;
                 
                 factory.SetBinding(System.Windows.Controls.TextBlock.TextProperty, binding);
                 // Bind to the row-level auto-select state so custom keywords are red when the file would be selected
                 // and green when it would be kept.
                 var foregroundBinding = new System.Windows.Data.Binding(".");
                 foregroundBinding.Converter = new ApexAstro.Wpf.Converters.AutoSelectRowForegroundConverter();
-                foregroundBinding.ConverterParameter = new ApexAstro.Wpf.Converters.AutoSelectKeywordForegroundContext
-                {
-                    Keyword = keyword,
-                    Criteria = _appConfig.AutoSelectCriteria
-                };
+                foregroundBinding.ConverterParameter = keywordContext;
                 factory.SetBinding(System.Windows.Controls.TextBlock.ForegroundProperty, foregroundBinding);
                 factory.SetValue(System.Windows.Controls.TextBlock.TextTrimmingProperty, System.Windows.TextTrimming.CharacterEllipsis);
                 // Calculate width based on actual data content - different for each keyword
@@ -431,17 +434,23 @@ namespace ApexAstro.Wpf.Services
                     continue;
 
                 var factory = new FrameworkElementFactory(typeof(System.Windows.Controls.TextBlock));
-                
-                // Use SafeDictionaryConverter with parameter to avoid KeyNotFoundException
-                var binding = new System.Windows.Data.Binding("FitsKeywords");
-                binding.Converter = new SafeDictionaryConverter();
-                binding.ConverterParameter = keyword;
-                
+
+                var keywordContext = new ApexAstro.Wpf.Converters.AutoSelectKeywordForegroundContext
+                {
+                    Keyword = keyword,
+                    Criteria = _appConfig.AutoSelectCriteria,
+                    DefaultBrushResourceKey = "ThemeAccentBlue",
+                    DefaultBrushFallback = System.Windows.Media.Brushes.Blue
+                };
+
+                var binding = new System.Windows.Data.Binding(".");
+                binding.Converter = new ApexAstro.Wpf.Converters.AutoSelectKeywordTextConverter();
+                binding.ConverterParameter = keywordContext;
+
                 factory.SetBinding(System.Windows.Controls.TextBlock.TextProperty, binding);
-                // Bind to theme resource so foreground color updates when theme changes
-                var foregroundBinding = new System.Windows.Data.Binding();
-                foregroundBinding.Source = System.Windows.Application.Current;
-                foregroundBinding.Path = new System.Windows.PropertyPath("Resources[ThemeAccentBlue]");
+                var foregroundBinding = new System.Windows.Data.Binding(".");
+                foregroundBinding.Converter = new ApexAstro.Wpf.Converters.AutoSelectRowForegroundConverter();
+                foregroundBinding.ConverterParameter = keywordContext;
                 factory.SetBinding(System.Windows.Controls.TextBlock.ForegroundProperty, foregroundBinding);
                 factory.SetValue(System.Windows.Controls.TextBlock.TextTrimmingProperty, System.Windows.TextTrimming.CharacterEllipsis);
                 // Calculate width based on actual data content - different for each keyword
@@ -467,14 +476,22 @@ namespace ApexAstro.Wpf.Services
 
                 var factory = new FrameworkElementFactory(typeof(System.Windows.Controls.TextBlock));
 
-                var binding = new System.Windows.Data.Binding("CsvKeywords");
-                binding.Converter = new SafeDictionaryConverter();
-                binding.ConverterParameter = keyword;
+                var keywordContext = new ApexAstro.Wpf.Converters.AutoSelectKeywordForegroundContext
+                {
+                    Keyword = keyword,
+                    Criteria = _appConfig.AutoSelectCriteria,
+                    DefaultBrushResourceKey = "ThemeAccentOrange",
+                    DefaultBrushFallback = System.Windows.Media.Brushes.Orange
+                };
+
+                var binding = new System.Windows.Data.Binding(".");
+                binding.Converter = new ApexAstro.Wpf.Converters.AutoSelectKeywordTextConverter();
+                binding.ConverterParameter = keywordContext;
 
                 factory.SetBinding(System.Windows.Controls.TextBlock.TextProperty, binding);
-                var foregroundBinding = new System.Windows.Data.Binding();
-                foregroundBinding.Source = System.Windows.Application.Current;
-                foregroundBinding.Path = new System.Windows.PropertyPath("Resources[ThemeAccentOrange]");
+                var foregroundBinding = new System.Windows.Data.Binding(".");
+                foregroundBinding.Converter = new ApexAstro.Wpf.Converters.AutoSelectRowForegroundConverter();
+                foregroundBinding.ConverterParameter = keywordContext;
                 factory.SetBinding(System.Windows.Controls.TextBlock.ForegroundProperty, foregroundBinding);
                 factory.SetValue(System.Windows.Controls.TextBlock.TextTrimmingProperty, System.Windows.TextTrimming.CharacterEllipsis);
                 double calculatedWidth = CalculateDataDrivenColumnWidth(keyword, false);
@@ -496,13 +513,21 @@ namespace ApexAstro.Wpf.Services
                     if (!ShouldIncludeMetadataColumn(keyword, MetadataColumnType.Arw))
                         continue;
 
-                    var binding = new System.Windows.Data.Binding("ArwKeywords");
-                    binding.Converter = new SafeDictionaryConverter();
-                    binding.ConverterParameter = keyword;
+                    var keywordContext = new ApexAstro.Wpf.Converters.AutoSelectKeywordForegroundContext
+                    {
+                        Keyword = keyword,
+                        Criteria = _appConfig.AutoSelectCriteria,
+                        DefaultBrushResourceKey = "ThemeAccentPurple",
+                        DefaultBrushFallback = System.Windows.Media.Brushes.MediumPurple
+                    };
 
-                    var foregroundBinding = new System.Windows.Data.Binding();
-                    foregroundBinding.Source = System.Windows.Application.Current;
-                    foregroundBinding.Path = new System.Windows.PropertyPath("Resources[ThemeAccentPurple]");
+                    var binding = new System.Windows.Data.Binding(".");
+                    binding.Converter = new ApexAstro.Wpf.Converters.AutoSelectKeywordTextConverter();
+                    binding.ConverterParameter = keywordContext;
+
+                    var foregroundBinding = new System.Windows.Data.Binding(".");
+                    foregroundBinding.Converter = new ApexAstro.Wpf.Converters.AutoSelectRowForegroundConverter();
+                    foregroundBinding.ConverterParameter = keywordContext;
 
                     var column = new GridViewColumn
                     {

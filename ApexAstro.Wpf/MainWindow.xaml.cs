@@ -180,6 +180,9 @@ namespace ApexAstro.Wpf
             _viewModel.RefreshFitsKeywordsWithProgressRequested += async () => 
                 await RefreshFitsKeywordsWithProgressAsync();
 
+            _viewModel.CalculateMediansWithProgressRequested += async () =>
+                await CalculateMediansWithProgressAsync();
+
             _viewModel.ComputeSnrRequested += async () =>
                 await ComputeSnrWithProgressAsync();
 
@@ -824,6 +827,42 @@ namespace ApexAstro.Wpf
             finally
             {
                 // Always close the loading window
+                loadingWindow?.Close();
+            }
+        }
+
+        /// <summary>
+        /// Calculates median/mean values with a progress dialog.
+        /// </summary>
+        private async Task CalculateMediansWithProgressAsync()
+        {
+            LoadingWindow? loadingWindow = null;
+
+            try
+            {
+                loadingWindow = new LoadingWindow("Calculating median and mean values...");
+                loadingWindow.Owner = this;
+                loadingWindow.Show();
+
+                await Task.Delay(50);
+
+                await Task.Run(() =>
+                {
+                    _viewModel?.CalculateMediansForAllFiles((current, total) =>
+                    {
+                        Dispatcher.Invoke(() =>
+                        {
+                            loadingWindow.UpdateProgress(current, total);
+                            Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                        });
+                    });
+                });
+
+                _listViewColumnService?.UpdateListViewColumns();
+                _listViewColumnService?.AutoResizeColumns();
+            }
+            finally
+            {
                 loadingWindow?.Close();
             }
         }

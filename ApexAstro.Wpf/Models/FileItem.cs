@@ -21,6 +21,7 @@ namespace ApexAstro.Wpf.Models
         private double? _perFrameSnr;
         private string _perFrameSnrGrade = string.Empty;
         private System.Windows.Media.Brush _perFrameSnrBrush = System.Windows.Media.Brushes.Transparent;
+        private bool _metadataReady = true;
 
         public string Name
         {
@@ -236,6 +237,19 @@ namespace ApexAstro.Wpf.Models
 
                 foreach (var key in value.Keys)
                     OnPropertyChanged(key);
+            }
+        }
+
+        public bool MetadataReady
+        {
+            get => _metadataReady;
+            set
+            {
+                if (_metadataReady != value)
+                {
+                    _metadataReady = value;
+                    OnPropertyChanged(nameof(MetadataReady));
+                }
             }
         }
 
