@@ -1,3 +1,7 @@
+## v1.12.2 - 2026-10-12
+
+- TODO: summarize changes
+
 ## v1.12.1 - 2026-10-09
 
 - TODO: summarize changes
