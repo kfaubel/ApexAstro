@@ -2426,6 +2426,11 @@ namespace ApexAstro.Wpf
                     }
                 }
 
+                if (markedCount > 0)
+                {
+                    _viewModel.SortByColumn("Mark");
+                }
+
                 _loggingService.LogInfo($"Auto-mark: Marked {markedCount} of {_viewModel.Files.Count} files for deletion based on criteria");
             }
             catch (Exception ex)

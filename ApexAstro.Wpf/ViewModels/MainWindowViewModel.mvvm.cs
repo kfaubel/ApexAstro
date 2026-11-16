@@ -1280,18 +1280,6 @@ namespace ApexAstro.Wpf.ViewModels
             }
         }
         
-        private static List<FileItem> PrioritizeMarkedFiles(List<FileItem> files)
-        {
-            if (files.Count == 0 || !files.Any(f => f.IsSelected))
-            {
-                return files;
-            }
-
-            return files
-                .OrderBy(f => f.IsSelected ? 0 : 1)
-                .ToList();
-        }
-
         /// <summary>
         /// Sorts a list of FileItem objects by the specified column
         /// </summary>
@@ -1346,7 +1334,7 @@ namespace ApexAstro.Wpf.ViewModels
                 _ => files // No sorting for unknown columns
             };
 
-            return PrioritizeMarkedFiles(orderedFiles);
+            return orderedFiles;
         }
         
         /// <summary>
@@ -2264,22 +2252,6 @@ namespace ApexAstro.Wpf.ViewModels
                 OnPropertyChanged(nameof(HasSelectedFiles));
                 OnPropertyChanged(nameof(FileSelectionStatusText));
                 OnPropertyChanged(nameof(StatusBarText));
-
-                if (!string.IsNullOrEmpty(_currentSortColumn) && Files.Count > 0)
-                {
-                    // Defer the sort so it does not run while the auto-mark loop or any other
-                    // enumeration is still iterating the same ObservableCollection.
-                    if (System.Windows.Application.Current is not null)
-                    {
-                        System.Windows.Application.Current.Dispatcher.BeginInvoke(
-                            System.Windows.Threading.DispatcherPriority.Background,
-                            new Action(ApplyCurrentSort));
-                    }
-                    else
-                    {
-                        ApplyCurrentSort();
-                    }
-                }
             }
         }
 
